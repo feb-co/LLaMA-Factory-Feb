@@ -17,7 +17,7 @@
 
 👋 Join our [WeChat](assets/wechat.jpg) or [NPU user group](assets/wechat_npu.jpg).
 
-\[ English | [中文](README_zh.md)| [FEB](README_feb.md) \]
+\[ English | [中文](README_zh.md) \]
 
 **Fine-tuning a large language model can be easy as...**
 
@@ -296,23 +296,23 @@ huggingface-cli login
 
 ## Requirement
 
-| Mandatory    | Minimum | Recommend |
-| ------------ | ------- | --------- |
-| python       | 3.8     | 3.11      |
-| torch        | 1.13.1  | 2.3.0     |
-| transformers | 4.41.2  | 4.41.2    |
-| datasets     | 2.16.0  | 2.19.2    |
-| accelerate   | 0.30.1  | 0.30.1    |
-| peft         | 0.11.1  | 0.11.1    |
-| trl          | 0.8.6   | 0.9.4     |
+| Mandatory    | Required |
+| ------------ | -------- |
+| python       | 3.11     |
+| torch        | 2.3.0    |
+| transformers | 4.41.2   |
+| datasets     | 2.19.2    |
+| accelerate   | 0.30.1    |
+| peft         | 0.11.1    |
+| trl          | 0.9.4     |
 
-| Optional     | Minimum | Recommend |
-| ------------ | ------- | --------- |
-| CUDA         | 11.6    | 12.2      |
-| deepspeed    | 0.10.0  | 0.14.0    |
-| bitsandbytes | 0.39.0  | 0.43.1    |
-| vllm         | 0.4.3   | 0.4.3     |
-| flash-attn   | 2.3.0   | 2.5.9     |
+| Optional     | Recommend |
+| ------------ | --------- |
+| CUDA         | 11.8      |
+| deepspeed    | 0.14.0    |
+| bitsandbytes | 0.43.1    |
+| vllm         | 0.4.3     |
+| flash-attn   | 2.6.3     |
 
 ### Hardware Requirement
 

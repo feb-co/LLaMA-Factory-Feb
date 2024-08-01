@@ -61,6 +61,38 @@ def greedy_knapsack(numbers: List[int], capacity: int) -> List[List[int]]:
     return knapsacks
 
 
+def packing_conversation(numbers: List[int], capacity: int) -> List[List[int]]:
+    r"""
+    An efficient packing algorithm with binary search for the conversation dataset.
+    """
+    knapsacks = []
+    data_idx_index = 0
+    while data_idx_index < len(numbers):
+        current_knapsack = []
+        remaining_capacity = capacity
+        while remaining_capacity > 0:
+            data_length = numbers[data_idx_index]
+            if data_length >= capacity:
+                if remaining_capacity == capacity:
+                    current_knapsack.append(data_idx_index)
+                    data_idx_index += 1
+                    remaining_capacity -= data_length
+                else:
+                    current_knapsack.append(data_idx_index)
+                    remaining_capacity -= data_length
+            elif data_length > remaining_capacity:
+                current_knapsack.append(data_idx_index)
+                remaining_capacity -= data_length
+            else:
+                current_knapsack.append(data_idx_index)
+                data_idx_index += 1
+                remaining_capacity -= data_length
+
+        knapsacks.append(current_knapsack)
+
+    return knapsacks
+
+
 def get_pixel_values(images: Sequence["ImageObject"], processor: "ProcessorMixin") -> "NDArray":
     r"""
     Processes visual inputs. (currently only supports a single image)

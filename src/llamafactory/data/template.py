@@ -82,6 +82,37 @@ class Template:
         """
         return self.format_tools.extract(content)
 
+    def encode_system(
+        self,
+        tokenizer: "PreTrainedTokenizer",
+        system: Optional[str] = None,
+        tools: Optional[str] = None,
+    ) -> Tuple[List[int], List[int]]:
+        r"""
+        Returns a single pair of token ids representing prompt and response respectively.
+        """
+        elements = []
+        elements += self.format_prefix.apply()
+        tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
+        elements += self.format_system.apply(content=(system + tool_text))
+        system_message = self._convert_elements_to_ids(tokenizer, elements)
+        return system_message
+
+    def encode_instruction(
+        self,
+        tokenizer: "PreTrainedTokenizer",
+        messages: Sequence[Dict[str, str]],
+    ) -> List[Tuple[List[int], List[int]]]:
+        r"""
+        Returns multiple pairs of token ids representing prompts and responses respectively.
+        """
+        if messages[0]['role'] == Role.SYSTEM.value:
+            system = messages[0]['content']
+        else:
+            system = None
+        encoded_messages = self._encode(tokenizer, messages, system, None)
+        return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
+
     def _encode(
         self,
         tokenizer: "PreTrainedTokenizer",
@@ -100,8 +131,8 @@ class Template:
             elements = []
 
             if i == 0:
-                elements += self.format_prefix.apply()
                 if system or tools:
+                    elements += self.format_prefix.apply()
                     tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
                     elements += self.format_system.apply(content=(system + tool_text))
 

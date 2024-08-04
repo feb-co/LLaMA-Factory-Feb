@@ -28,5 +28,6 @@ __all__ = [
     "get_dataset",
     "TEMPLATES",
     "Template",
+    "get_feb_dataset",
     "get_template_and_fix_tokenizer",
 ]

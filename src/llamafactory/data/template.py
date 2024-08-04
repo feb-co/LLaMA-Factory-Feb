@@ -91,6 +91,9 @@ class Template:
         r"""
         Returns a single pair of token ids representing prompt and response respectively.
         """
+        if len(system) == 0 and len(tools) == 0:
+            return []
+
         elements = []
         elements += self.format_prefix.apply()
         tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
@@ -241,6 +244,8 @@ def _register_template(
     replace_eos: bool = False,
 ) -> None:
     r"""
+    The parameter `efficient_eos` is used to determine whether eos needs to be added to the input. If not, it is True, otherwise it is False.
+
     Registers a chat template.
 
     To add the following chat template:

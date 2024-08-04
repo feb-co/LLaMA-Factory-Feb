@@ -46,9 +46,9 @@ logger = get_logger(__name__)
 
 
 
-"""
-conversation
-"""
+# """
+# conversation
+# """
 def _encode_conversation_example(
     prompt: Sequence[Dict[str, str]],
     response: Sequence[Dict[str, str]],
@@ -80,21 +80,29 @@ def _encode_conversation_example(
         tokenizer=tokenizer, messages=messages, system=None, tools=None
     )
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
+        source_len = len(source_ids)
+        target_len = len(target_ids)
+        
         if train_on_prompt:
             source_label = source_ids
+        elif turn_idx != 0 and template.efficient_eos:
+            source_label = [tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
         else:
-            source_label = [IGNORE_INDEX] * len(source_ids)
+            source_label = [IGNORE_INDEX] * source_len
 
         if mask_history and turn_idx != len(encoded_pairs) - 1:
-            target_label = [IGNORE_INDEX] * len(target_ids)
+            target_label = [IGNORE_INDEX] * target_len
         else:
-            target_label = target_ids[1:] + [tokenizer.eos_token_id]
+            target_label = target_ids
 
         input_ids += source_ids + target_ids
         labels += source_label + target_label
 
-    input_ids += [tokenizer.eos_token_id]
-    labels += [IGNORE_INDEX]
+    if template.efficient_eos:
+        input_ids += [tokenizer.eos_token_id]
+        labels += [tokenizer.eos_token_id]
+    
+    assert len(input_ids) == len(labels), "The length of input_ids should equal with labels' length!"
 
     return prefix_ids, input_ids, labels
 
@@ -172,7 +180,6 @@ def preprocess_packed_conversation_dataset(
             template=template,
             tokenizer=tokenizer,
             processor=None,
-            cutoff_len=data_args.cutoff_len - 1,  # reserved for the padding token
             train_on_prompt=data_args.train_on_prompt,
             mask_history=data_args.mask_history,
         )
@@ -232,7 +239,7 @@ def preprocess_packed_conversation_dataset(
                 len(packed_input_ids)
                 == len(packed_attention_masks)
                 == len(packed_labels)
-                == len(data_args.cutoff_len)
+                == data_args.cutoff_len
             ), "The length of packed example should be identical to the cutoff length."
 
             sub_model_inputs["input_ids"].append(packed_input_ids)
@@ -262,9 +269,9 @@ def print_conversation_dataset_example(
     )
 
 
-"""
-instruction
-"""
+# """
+# instruction
+# """
 def _encode_instruction_example(
     prompt: Sequence[Dict[str, str]],
     response: Sequence[Dict[str, str]],
@@ -293,18 +300,27 @@ def _encode_instruction_example(
         tokenizer=tokenizer, messages=messages
     )
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
+        source_len = len(source_ids)
+        target_len = len(target_ids)
+        
         if train_on_prompt:
             source_label = source_ids
+        elif turn_idx != 0 and template.efficient_eos:
+            source_label = [tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
         else:
-            source_label = [IGNORE_INDEX] * len(source_ids)
+            source_label = [IGNORE_INDEX] * source_len
 
         if mask_history and turn_idx != len(encoded_pairs) - 1:
-            target_label = [IGNORE_INDEX] * len(target_ids)
+            target_label = [IGNORE_INDEX] * target_len
         else:
-            target_label = target_ids[1:] + [tokenizer.eos_token_id]
+            target_label = target_ids
 
         input_ids += source_ids + target_ids
         labels += source_label + target_label
+
+    if template.efficient_eos:
+        input_ids += [tokenizer.eos_token_id]
+        labels += [tokenizer.eos_token_id]
     
     return input_ids, labels
 
@@ -347,7 +363,7 @@ def preprocess_instruction_dataset(
             len(input_ids)
             == len(attention_masks)
             == len(labels)
-            == len(data_args.cutoff_len)
+            == data_args.cutoff_len
         ), "The length of packed example should be identical to the cutoff length."
 
         model_inputs["input_ids"].append(input_ids)
@@ -366,9 +382,9 @@ def preprocess_instruction_dataset(
     return model_inputs
 
 
-"""
-pretrain
-"""
+# """
+# pretrain
+# """
 def preprocess_pretrain_dataset(
     examples: Dict[str, List[Any]], tokenizer: "PreTrainedTokenizer", data_args: "DataArguments"
 ) -> Dict[str, List[List[int]]]:
@@ -382,8 +398,7 @@ def preprocess_pretrain_dataset(
         lengths = []
         for text in text_examples:
             input_ids = tokenizer.encode(text, add_special_tokens=False)
-            labels = input_ids[1:]
-            input_ids = input_ids[:-1]
+            labels = input_ids[:]
             batch_input_ids.append(input_ids)
             batch_labels.append(labels)
             lengths.append(len(input_ids))
@@ -406,12 +421,12 @@ def preprocess_pretrain_dataset(
                 packed_input_ids = packed_input_ids[: data_args.cutoff_len]
                 packed_attention_masks = packed_attention_masks[: data_args.cutoff_len]
                 packed_labels = packed_labels[: data_args.cutoff_len]
-            
+
             assert (
                 len(packed_input_ids)
                 == len(packed_attention_masks)
                 == len(packed_labels)
-                == len(data_args.cutoff_len)
+                == data_args.cutoff_len
             ), "The length of packed example should be identical to the cutoff length."
 
             model_inputs["input_ids"].append(packed_input_ids)

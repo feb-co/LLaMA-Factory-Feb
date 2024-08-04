@@ -115,19 +115,6 @@ def get_preprocess_and_print_func(
         print_function = partial(print_supervised_dataset_example, tokenizer=tokenizer)
     elif stage == "conversation":
         if data_args.packing:
-            if data_args.neat_packing:
-                from datasets.arrow_writer import OptimizedTypedSequence, TypedSequence
-
-                def __init__(self, data, **kwargs):
-                    return TypedSequence.__init__(
-                        self,
-                        data,
-                        type=kwargs.pop("type", None),
-                        try_type=kwargs.pop("try_type", None),
-                        optimized_int_type=kwargs.pop("optimized_int_type", None),
-                    )
-
-                OptimizedTypedSequence.__init__ = __init__
             preprocess_func = partial(
                 preprocess_packed_conversation_dataset,
                 template=template,
@@ -148,10 +135,8 @@ def get_preprocess_and_print_func(
         )
     elif stage == "pretrain":
         preprocess_func = partial(
-            preprocess_conversation_dataset,
-            template=template,
+            preprocess_pretrain_dataset,
             tokenizer=tokenizer,
-            processor=processor,
             data_args=data_args,
         )
         print_function = partial(

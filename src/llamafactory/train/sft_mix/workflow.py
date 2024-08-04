@@ -51,7 +51,6 @@ def run_sft_mix(
     tokenizer_module = load_tokenizer(model_args)
     tokenizer = tokenizer_module["tokenizer"]
     dataset_module = get_feb_dataset(model_args, data_args, training_args, **tokenizer_module)
-    import pdb; pdb.set_trace()
     model = load_model(tokenizer, model_args, finetuning_args, training_args.do_train)
 
     if getattr(model, "is_quantized", False) and not training_args.do_train:

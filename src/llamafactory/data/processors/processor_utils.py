@@ -70,7 +70,7 @@ def packing_conversation(numbers: List[int], capacity: int) -> List[List[int]]:
     while data_idx_index < len(numbers):
         current_knapsack = []
         remaining_capacity = capacity
-        while remaining_capacity > 0:
+        while remaining_capacity > 0 and data_idx_index < len(numbers):
             data_length = numbers[data_idx_index]
             if data_length >= capacity:
                 if remaining_capacity == capacity:

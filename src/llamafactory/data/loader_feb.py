@@ -24,7 +24,7 @@
 
 import os
 import sys
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Dict, Literal, Optional, Union
 
 import numpy as np
 from datasets import DatasetDict, load_dataset, load_from_disk
@@ -33,12 +33,12 @@ from transformers.utils.versions import require_version
 from ..extras.constants import FILEEXT2TYPE
 from ..extras.logging import get_logger
 from ..extras.misc import has_tokenized_data
-from .aligner import align_dataset
 from .data_utils import merge_dataset, split_dataset
-from .parser import get_dataset_list
 from .preprocess import get_preprocess_and_print_func
 from .template import get_template_and_fix_tokenizer
 
+from .aligner_feb import align_dataset
+from .parser_feb import get_dataset_list
 
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
@@ -50,8 +50,9 @@ if TYPE_CHECKING:
 
     from ..hparams import DataArguments, ModelArguments
     from .data_utils import DatasetModule
-    from .parser import DatasetAttr
     from .template import Template
+    
+    from .parser_feb import DatasetAttr
 
 
 logger = get_logger(__name__)
@@ -128,7 +129,7 @@ def _load_single_dataset(
             cache_dir=model_args.cache_dir,
             token=model_args.hf_hub_token,
             streaming=(data_args.streaming and (dataset_attr.load_from != "file")),
-            trust_remote_code=True,
+            trust_remote_code=True
         )
 
     if data_args.streaming and (
@@ -136,19 +137,19 @@ def _load_single_dataset(
     ):  # faster than specifying streaming=True
         dataset = dataset.to_iterable_dataset()  # TODO: add num shards parameter
 
-    if dataset_attr.num_samples is not None and not data_args.streaming:
-        target_num = dataset_attr.num_samples
+    if dataset_attr.samples_ratio is not None and not data_args.streaming:
+        target_num = len(dataset) * dataset_attr.samples_ratio
         indexes = np.random.permutation(len(dataset))[:target_num]
         target_num -= len(indexes)
         if target_num > 0:
             expand_indexes = np.random.choice(len(dataset), target_num)
             indexes = np.concatenate((indexes, expand_indexes), axis=0)
 
-        assert len(indexes) == dataset_attr.num_samples, "Sample num mismatched."
+        assert len(indexes) == target_num, "Sample num mismatched."
         dataset = dataset.select(indexes)
         logger.info(
             "Sampled {} examples from dataset {}.".format(
-                dataset_attr.num_samples, dataset_attr
+                target_num, dataset_attr
             )
         )
 
@@ -199,14 +200,9 @@ def _get_preprocessed_dataset(
             print("eval example:" if is_eval else "training example:")
             print_function(next(iter(dataset)))
         except StopIteration:
-            if stage == "pt":
-                raise RuntimeError(
-                    "Cannot find sufficient samples, consider increasing dataset size."
-                )
-            else:
-                raise RuntimeError(
-                    "Cannot find valid samples, check `data/README.md` for the data format."
-                )
+            raise RuntimeError(
+                "Cannot find valid samples, check `data/README.md` for the data format."
+            )
 
     return dataset
 

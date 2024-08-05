@@ -68,7 +68,7 @@ def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: List["TrainerCallb
     elif finetuning_args.stage == "kto":
         run_kto(model_args, data_args, training_args, finetuning_args, callbacks)
     elif finetuning_args.stage == "sft_mix":
-        run_sft_mix(model_args, data_args, training_args, finetuning_args, callbacks)
+        run_sft_mix(model_args, data_args, training_args, finetuning_args, generating_args, callbacks)
     else:
         raise ValueError("Unknown task: {}.".format(finetuning_args.stage))
 

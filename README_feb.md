@@ -65,7 +65,7 @@ conda install -c "nvidia/label/cuda-12.1.0" cuda-nvcc
 
 ```bash
 git clone --depth 1 https://github.com/hiyouga/LLaMA-Factory.git
-cd LLaMA-Factory
+cd LLaMA-Factory-Feb
 pip install -e ".[torch,metrics]"
 ```
 

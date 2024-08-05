@@ -137,12 +137,13 @@ def _load_single_dataset(
     ):  # faster than specifying streaming=True
         dataset = dataset.to_iterable_dataset()  # TODO: add num shards parameter
 
+    # samplse dataset
     if dataset_attr.samples_ratio is not None and not data_args.streaming:
-        target_num = len(dataset) * dataset_attr.samples_ratio
+        target_num = int(len(dataset) * dataset_attr.samples_ratio)
         indexes = np.random.permutation(len(dataset))[:target_num]
-        target_num -= len(indexes)
-        if target_num > 0:
-            expand_indexes = np.random.choice(len(dataset), target_num)
+        remaining_num = target_num - len(indexes)
+        if remaining_num > 0:
+            expand_indexes = np.random.choice(len(dataset), remaining_num)
             indexes = np.concatenate((indexes, expand_indexes), axis=0)
 
         assert len(indexes) == target_num, "Sample num mismatched."
@@ -153,7 +154,8 @@ def _load_single_dataset(
             )
         )
 
-    if data_args.max_samples is not None:  # truncate dataset
+    # truncate dataset
+    if data_args.max_samples is not None:
         max_samples = min(data_args.max_samples, len(dataset))
         dataset = dataset.select(range(max_samples))
 
@@ -277,7 +279,7 @@ def get_dataset(
                 is_eval=False,
             )
 
-            dataset_list.append(sub_dataset)
+        dataset_list.append(sub_dataset)
 
     dataset = merge_dataset(dataset_list, data_args, seed=training_args.seed)
 

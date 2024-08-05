@@ -125,10 +125,11 @@ def convert_sharegpt(
         dataset_attr.observation_tag: Role.OBSERVATION.value,
         dataset_attr.function_tag: Role.FUNCTION.value,
         dataset_attr.system_tag: Role.SYSTEM.value,
+        dataset_attr.mask_tag: Role.MASK.value,
     }
-    odd_tags = (dataset_attr.user_tag, dataset_attr.observation_tag)
-    even_tags = (dataset_attr.assistant_tag, dataset_attr.function_tag)
-    accept_tags = (odd_tags, even_tags)
+    even_tags = (dataset_attr.user_tag, dataset_attr.observation_tag)
+    odd_tags = (dataset_attr.assistant_tag, dataset_attr.function_tag, dataset_attr.mask_tag)
+    accept_tags = (even_tags, odd_tags)
     for i, messages in enumerate(examples[dataset_attr.messages]):
         if len(messages) == 0:
             continue

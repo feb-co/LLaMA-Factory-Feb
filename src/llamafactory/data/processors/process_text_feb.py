@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from ...extras.constants import IGNORE_INDEX
 from ...extras.logging import get_logger
+from ..data_utils import Role
 from .processor_utils import (
     get_paligemma_token_type_ids,
     get_pixel_values,
@@ -79,6 +80,7 @@ def _encode_conversation_example(
     encoded_pairs = template.encode_multiturn(
         tokenizer=tokenizer, messages=messages, system=None, tools=None
     )
+    text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
         source_len = len(source_ids)
         target_len = len(target_ids)
@@ -91,6 +93,8 @@ def _encode_conversation_example(
             source_label = [IGNORE_INDEX] * source_len
 
         if mask_history and turn_idx != len(encoded_pairs) - 1:
+            target_label = [IGNORE_INDEX] * target_len
+        elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
             target_label = [IGNORE_INDEX] * target_len
         else:
             target_label = target_ids
@@ -299,6 +303,7 @@ def _encode_instruction_example(
     encoded_pairs = template.encode_instruction(
         tokenizer=tokenizer, messages=messages
     )
+    text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
         source_len = len(source_ids)
         target_len = len(target_ids)
@@ -311,6 +316,8 @@ def _encode_instruction_example(
             source_label = [IGNORE_INDEX] * source_len
 
         if mask_history and turn_idx != len(encoded_pairs) - 1:
+            target_label = [IGNORE_INDEX] * target_len
+        elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
             target_label = [IGNORE_INDEX] * target_len
         else:
             target_label = target_ids

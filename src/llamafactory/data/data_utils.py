@@ -39,6 +39,7 @@ class Role(str, Enum):
     SYSTEM = "system"
     FUNCTION = "function"
     OBSERVATION = "observation"
+    MASK = "mask"
 
 
 class DatasetModule(TypedDict):

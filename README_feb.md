@@ -31,20 +31,14 @@ Choose your path:
 
 ## Table of Contents
 
-- [Features](#features)
+- [New Features](#features)
 - [Getting Started](#getting-started)
 - [Quick Runing](#quick-runing)
 - [Data Requirements](#data-requirements)
 
-## Features 🎉
+## New Features 🎉
 
-- **Various models**: LLaMA, LLaVA, Mistral, Mixtral-MoE, Qwen, Yi, Gemma, Baichuan, ChatGLM, Phi, etc.
-- **Integrated methods**: (Continuous) pre-training, (multimodal) supervised fine-tuning, reward modeling, PPO, DPO, KTO, ORPO, etc.
-- **Scalable resources**: 16-bit full-tuning, freeze-tuning, LoRA and 2/3/4/5/6/8-bit QLoRA via AQLM/AWQ/GPTQ/LLM.int8/HQQ/EETQ.
-- **Advanced algorithms**: GaLore, BAdam, DoRA, LongLoRA, LLaMA Pro, Mixture-of-Depths, LoRA+, LoftQ, PiSSA and Agent tuning.
-- **Practical tricks**: FlashAttention-2, Unsloth, RoPE scaling, NEFTune and rsLoRA.
-- **Experiment monitors**: LlamaBoard, TensorBoard, Wandb, MLflow, etc.
-- **Faster inference**: OpenAI-style API, Gradio UI and CLI with vLLM worker.
+- **Mixed data training**: Supports simultaneous training with multiple data types: Pretrain, Instruction training, Conversation training.
 
 ## Getting Started 🛞
 

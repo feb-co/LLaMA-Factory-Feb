@@ -13,6 +13,9 @@
 # limitations under the License.
 
 from .loader import load_config, load_model, load_tokenizer
+from .loader_feb import load_config as load_config_feb
+from .loader_feb import load_model as load_model_feb
+from .loader_feb import load_tokenizer as load_tokenizer_feb
 from .model_utils.misc import find_all_linear_modules
 from .model_utils.quantization import QuantizationMethod
 from .model_utils.valuehead import load_valuehead_params
@@ -23,6 +26,9 @@ __all__ = [
     "load_config",
     "load_model",
     "load_tokenizer",
+    "load_config_feb",
+    "load_model_feb",
+    "load_tokenizer_feb",
     "find_all_linear_modules",
     "load_valuehead_params",
 ]

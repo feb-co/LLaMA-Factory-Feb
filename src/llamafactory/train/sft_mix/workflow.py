@@ -28,7 +28,7 @@ from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset
 from ...extras.constants import IGNORE_INDEX
 from ...extras.misc import get_logits_processor
 from ...extras.ploting import plot_loss
-from ...model import load_model, load_tokenizer
+from ...model import load_model_feb, load_tokenizer_feb
 from ..trainer_utils import create_modelcard_and_push
 from .metric import ComputeAccuracy, ComputeSimilarity, eval_logit_processor
 from .trainer import CustomSeq2SeqTrainer
@@ -48,10 +48,10 @@ def run_sft_mix(
     generating_args: "GeneratingArguments",
     callbacks: Optional[List["TrainerCallback"]] = None,
 ):
-    tokenizer_module = load_tokenizer(model_args)
+    tokenizer_module = load_tokenizer_feb(model_args)
     tokenizer = tokenizer_module["tokenizer"]
     dataset_module = get_feb_dataset(model_args, data_args, training_args, **tokenizer_module)
-    model = load_model(tokenizer, model_args, finetuning_args, training_args.do_train)
+    model = load_model_feb(tokenizer, model_args, finetuning_args, training_args.do_train)
 
     if getattr(model, "is_quantized", False) and not training_args.do_train:
         setattr(model, "_hf_peft_config_loaded", True)  # hack here: make model compatible with prediction

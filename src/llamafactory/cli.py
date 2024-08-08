@@ -48,7 +48,7 @@ USAGE = (
     + "|   llamafactory-cli eval -h: evaluate models                        |\n"
     + "|   llamafactory-cli export -h: merge LoRA adapters and export model |\n"
     + "|   llamafactory-cli train -h: train models                          |\n"
-    + "|   llamafactory-cli train_ds -h: train models                          |\n"
+    + "|   llamafactory-cli train_ds -h: train models                       |\n"
     + "|   llamafactory-cli webchat -h: launch a chat interface in Web UI   |\n"
     + "|   llamafactory-cli webui: launch LlamaBoard                        |\n"
     + "|   llamafactory-cli version: show version info                      |\n"
@@ -121,6 +121,36 @@ def main():
             sys.exit(process.returncode)
         else:
             run_exp()
+    elif command == Command.TRAIN_DS:
+        hostfile = os.environ.get("HOST_FILE", "")
+        gpu_address = os.environ.get("GPU_ADDRESS", "")
+        master_port = os.environ.get("MASTER_PORT", str(random.randint(20001, 29999)))
+        logger.info("Initializing distributed tasks at: localhost:{}".format(master_port))
+        if len(hostfile)>0:
+            process = subprocess.run(
+                (
+                    "deepspeed --hostfile {hostfile} --include {gpu_address} --master_port {master_port} {file_name} {args}"
+                ).format(
+                    hostfile=hostfile,
+                    gpu_address=gpu_address,
+                    master_port=master_port,
+                    file_name=launcher.__file__,
+                    args=" ".join(sys.argv[1:]),
+                ),
+                shell=True,
+            )
+        else:
+            process = subprocess.run(
+                (
+                    "deepspeed --num_gpus {nproc_per_node} {file_name} {args}"
+                ).format(
+                    nproc_per_node=os.environ.get("NPROC_PER_NODE", str(get_device_count())),
+                    file_name=launcher.__file__,
+                    args=" ".join(sys.argv[1:]),
+                ),
+                shell=True,
+            )
+        sys.exit(process.returncode)
     elif command == Command.WEBDEMO:
         run_web_demo()
     elif command == Command.WEBUI:

@@ -7,7 +7,8 @@
 
 ## New Features 🎉
 
-- **Mixed data training**: Supports simultaneous training with multiple data types: Pretrain, Instruction training, Conversation training.
+- **Mixed data training**: Supporting simultaneous training with multiple data types: Pretrain, Instruction training, Conversation training.
+- **DeepSpeed launch**: Supporting model training across multiple machines and multiple GPU using the deepspeed command.
 
 ## Getting Started 🛞
 
@@ -19,6 +20,8 @@
 conda create -n feb_platform python=3.11
 conda activate feb_platform
 conda install -c "nvidia/label/cuda-12.1.0" cuda-nvcc
+conda config --add channels nvidia
+conda install -c nvidia cuda-toolkit=12.1
 ```
 
 ### Installation

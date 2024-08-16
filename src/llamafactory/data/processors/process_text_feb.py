@@ -253,15 +253,17 @@ def print_conversation_dataset_example(
     example: Dict[str, List[int]], tokenizer: "PreTrainedTokenizer"
 ) -> None:
     valid_labels = list(filter(lambda x: x != IGNORE_INDEX, example["labels"]))
-    print("input_ids:\n{}".format(example["input_ids"]))
+    print("input_ids:\n{}".format(example["input_ids"]), flush=True)
     print(
         "inputs:\n{}".format(
             tokenizer.decode(example["input_ids"], skip_special_tokens=False)
-        )
+        ),
+        flush=True,
     )
-    print("label_ids:\n{}".format(example["labels"]))
+    print("label_ids:\n{}".format(example["labels"]), flush=True)
     print(
-        "labels:\n{}".format(tokenizer.decode(valid_labels, skip_special_tokens=False))
+        "labels:\n{}".format(tokenizer.decode(valid_labels, skip_special_tokens=False)),
+        flush=True,
     )
 
 

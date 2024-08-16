@@ -199,7 +199,7 @@ def _get_preprocessed_dataset(
 
     if training_args.should_log:
         try:
-            print(f"{stage} eval example:" if is_eval else f"{stage} training example:")
+            print(f"{stage} eval example:" if is_eval else f"{stage} training example:", flush=True)
             print_function(next(iter(dataset)))
         except StopIteration:
             raise RuntimeError(

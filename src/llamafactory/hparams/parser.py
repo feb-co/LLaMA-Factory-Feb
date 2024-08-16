@@ -170,7 +170,7 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
     if finetuning_args.stage != "sft" and training_args.predict_with_generate:
         raise ValueError("`predict_with_generate` cannot be set as True except SFT.")
 
-    if finetuning_args.stage != "sft" and data_args.neat_packing:
+    if finetuning_args.stage not in ("sft", "sft_mix") and data_args.neat_packing:
         raise ValueError("`neat_packing` cannot be set as True except SFT.")
 
     if finetuning_args.stage == "sft" and training_args.do_predict and not training_args.predict_with_generate:

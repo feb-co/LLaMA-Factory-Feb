@@ -45,8 +45,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-
-
 # """
 # conversation
 # """
@@ -84,7 +82,7 @@ def _encode_conversation_example(
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
         source_len = len(source_ids)
         target_len = len(target_ids)
-        
+
         if train_on_prompt:
             source_label = source_ids
         elif turn_idx != 0 and template.efficient_eos:
@@ -105,8 +103,10 @@ def _encode_conversation_example(
     if template.efficient_eos:
         input_ids += [tokenizer.eos_token_id]
         labels += [tokenizer.eos_token_id]
-    
-    assert len(input_ids) == len(labels), "The length of input_ids should equal with labels' length!"
+
+    assert len(input_ids) == len(
+        labels
+    ), "The length of input_ids should equal with labels' length!"
 
     return prefix_ids, input_ids, labels
 
@@ -214,14 +214,9 @@ def preprocess_packed_conversation_dataset(
             for i, index in enumerate(knapsack):
                 packed_input_ids += batch_input_ids[system_ids_key][index]
                 packed_labels += batch_labels[system_ids_key][index]
-                if data_args.neat_packing:
-                    packed_attention_masks += [i + 1] * len(
-                        batch_input_ids[system_ids_key][index]
-                    )  # start from 1
-                else:
-                    packed_attention_masks += [1] * len(
-                        batch_input_ids[system_ids_key][index]
-                    )
+                packed_attention_masks += [1] * len(
+                    batch_input_ids[system_ids_key][index]
+                )
 
             packed_input_ids = system_ids + packed_input_ids
             packed_attention_masks = [1] * system_ids_len + packed_attention_masks
@@ -230,10 +225,7 @@ def preprocess_packed_conversation_dataset(
                 pad_length = data_args.cutoff_len - len(packed_input_ids)
                 packed_input_ids += [tokenizer.pad_token_id] * pad_length
                 packed_labels += [IGNORE_INDEX] * pad_length
-                if data_args.neat_packing:
-                    packed_attention_masks += [0] * pad_length
-                else:
-                    packed_attention_masks += [1] * pad_length
+                packed_attention_masks += [1] * pad_length
             elif len(packed_input_ids) > data_args.cutoff_len:
                 packed_input_ids = packed_input_ids[: data_args.cutoff_len]
                 packed_attention_masks = packed_attention_masks[: data_args.cutoff_len]
@@ -279,6 +271,8 @@ def print_conversation_dataset_example(
 def _encode_instruction_example(
     prompt: Sequence[Dict[str, str]],
     response: Sequence[Dict[str, str]],
+    system: Optional[str],
+    tools: Optional[str],
     template: "Template",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"],
@@ -300,14 +294,13 @@ def _encode_instruction_example(
         input_ids += [image_token_id] * getattr(processor, "image_seq_length")
         labels += [IGNORE_INDEX] * getattr(processor, "image_seq_length")
 
-    encoded_pairs = template.encode_instruction(
-        tokenizer=tokenizer, messages=messages
-    )
+    prefix_ids = template.encode_system(tokenizer=tokenizer, system=system, tools=tools)
+    encoded_pairs = template.encode_instruction(tokenizer=tokenizer, messages=messages)
     text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
         source_len = len(source_ids)
         target_len = len(target_ids)
-        
+
         if train_on_prompt:
             source_label = source_ids
         elif turn_idx != 0 and template.efficient_eos:
@@ -328,8 +321,12 @@ def _encode_instruction_example(
     if template.efficient_eos:
         input_ids += [tokenizer.eos_token_id]
         labels += [tokenizer.eos_token_id]
-    
-    return input_ids, labels
+
+    assert len(input_ids) == len(
+        labels
+    ), "The length of input_ids should equal with labels' length!"
+
+    return prefix_ids, input_ids, labels
 
 
 def preprocess_instruction_dataset(
@@ -346,37 +343,42 @@ def preprocess_instruction_dataset(
             model_inputs["token_type_ids"] = []
 
     for i in range(len(examples["prompt"])):
-        input_ids, labels = _encode_instruction_example(
+        prefix_ids, input_ids, labels = _encode_instruction_example(
             prompt=examples["prompt"][i],
             response=examples["response"][i],
+            system=examples["system"][i],
+            tools=examples["tools"][i],
             template=template,
             tokenizer=tokenizer,
             processor=processor,
             train_on_prompt=data_args.train_on_prompt,
             mask_history=data_args.mask_history,
         )
-        
-        if len(input_ids) < data_args.cutoff_len:
-            pad_length = data_args.cutoff_len - len(input_ids)
-            input_ids += [tokenizer.pad_token_id] * pad_length
-            labels += [IGNORE_INDEX] * pad_length
-        elif len(input_ids) > data_args.cutoff_len:
-            input_ids = input_ids[: data_args.cutoff_len]
-            labels = labels[: data_args.cutoff_len]
-        
-        attention_masks = [1] * len(input_ids)
-        
+
+        concat_input_ids = prefix_ids + input_ids
+        concat_labels = [IGNORE_INDEX] * len(prefix_ids) + labels
+
+        if len(concat_input_ids) < data_args.cutoff_len:
+            pad_length = data_args.cutoff_len - len(concat_input_ids)
+            concat_input_ids += [tokenizer.pad_token_id] * pad_length
+            concat_labels += [IGNORE_INDEX] * pad_length
+        elif len(concat_input_ids) > data_args.cutoff_len:
+            concat_input_ids = concat_input_ids[: data_args.cutoff_len]
+            concat_labels = concat_labels[: data_args.cutoff_len]
+
+        attention_masks = [1] * len(concat_input_ids)
+
         assert (
-            len(input_ids)
+            len(concat_input_ids)
             == len(attention_masks)
-            == len(labels)
+            == len(concat_labels)
             == data_args.cutoff_len
         ), "The length of packed example should be identical to the cutoff length."
 
-        model_inputs["input_ids"].append(input_ids)
+        model_inputs["input_ids"].append(concat_input_ids)
         model_inputs["attention_mask"].append(attention_masks)
-        model_inputs["labels"].append(labels)
-        
+        model_inputs["labels"].append(concat_labels)
+
         if processor is not None:
             model_inputs["pixel_values"].append(
                 get_pixel_values(examples["images"][i], processor)
@@ -393,13 +395,23 @@ def preprocess_instruction_dataset(
 # pretrain
 # """
 def preprocess_pretrain_dataset(
-    examples: Dict[str, List[Any]], tokenizer: "PreTrainedTokenizer", data_args: "DataArguments"
+    examples: Dict[str, List[Any]],
+    tokenizer: "PreTrainedTokenizer",
+    data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     eos_token = tokenizer.eos_token
-    text_examples = [tokenizer.bos_token + messages[0]["content"] + eos_token for messages in examples["prompt"]]
+    text_examples = [
+        tokenizer.bos_token + messages[0]["content"] + eos_token
+        for messages in examples["prompt"]
+    ]
 
     if not data_args.packing:
-        model_inputs = tokenizer(text_examples, add_special_tokens=False, max_length=data_args.cutoff_len, truncation=True)
+        model_inputs = tokenizer(
+            text_examples,
+            add_special_tokens=False,
+            max_length=data_args.cutoff_len,
+            truncation=True,
+        )
     else:
         batch_input_ids, batch_labels = [], []
         lengths = []
@@ -417,13 +429,19 @@ def preprocess_pretrain_dataset(
             for i, index in enumerate(knapsack):
                 packed_input_ids += batch_input_ids[index]
                 packed_labels += batch_labels[index]
-                packed_attention_masks += [1] * len(batch_input_ids[index])
-            
+                if data_args.neat_packing:
+                    packed_attention_masks += [i + 1] * len(batch_input_ids[index])  # start from 1
+                else:
+                    packed_attention_masks += [1] * len(batch_input_ids[index])
+
             if len(packed_input_ids) < data_args.cutoff_len:
                 pad_length = data_args.cutoff_len - len(packed_input_ids)
                 packed_input_ids += [tokenizer.pad_token_id] * pad_length
                 packed_labels += [IGNORE_INDEX] * pad_length
-                packed_attention_masks += [1] * pad_length
+                if data_args.neat_packing:
+                    packed_attention_masks += [0] * pad_length
+                else:
+                    packed_attention_masks += [1] * pad_length  # more efficient flash_attn
             elif len(packed_input_ids) > data_args.cutoff_len:
                 packed_input_ids = packed_input_ids[: data_args.cutoff_len]
                 packed_attention_masks = packed_attention_masks[: data_args.cutoff_len]

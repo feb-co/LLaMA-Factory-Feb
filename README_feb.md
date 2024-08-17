@@ -8,7 +8,6 @@
 ## New Features 🎉
 
 - **Mixed data training**: Supporting simultaneous training with multiple data types: Pretrain, Instruction training, Conversation training.
-- **DeepSpeed launch**: Supporting model training across multiple machines and multiple GPU using the deepspeed command.
 
 ## Getting Started 🛞
 
@@ -70,6 +69,7 @@ python src/webui.py \
 ## Data Requirements 📊
 
 ### create your `dataset_info.json`
+
 First, you need to create a `dataset_info.json` in your dataser dir, which dir includes all dataset that you want to use to traning. the following example shows the struction of `dataset_info.json`:
 
 ```json
@@ -107,11 +107,11 @@ The meaning of each field name in dict is as follows:
 
 - **file_name**: the `file_name` represent a releative dataset path that need to be trained, which can be a file or a directory.
 - **stage**: the `stage` represent how to use this dataset to training, which will affect the method of data packing, now we support 3 type:
-    - *conversation*:  `conversation` will pack multi dataset into one sequence untill it meet the max length of training for one example.
-    - *instruction*: `instruction` will not pack dataset, if one data less than the max length, it will pading the `pad_token` token in tokenizer, untill it meet the max length of training for one example.
-    - *pretrain*: `pretrain` will packing pretrain dataset to max length, but the difference with `conversation` is pretrain dataset will use all tokens in data to training.
+  - *conversation*:  `conversation` will pack multi dataset into one sequence untill it meet the max length of training for one example.
+  - *instruction*: `instruction` will not pack dataset, if one data less than the max length, it will pading the `pad_token` token in tokenizer, untill it meet the max length of training for one example.
+  - *pretrain*: `pretrain` will packing pretrain dataset to max length, but the difference with `conversation` is pretrain dataset will use all tokens in data to training.
 - **formatting**: the `formatting` represent the data format that need to process, now we support 2 type:
-    - *sharegpt*: this file should be `.jsonl` format, and every data in file should be `{"id": xxx, "conversation": [{"from": "xxx", "value": "xxx"}]}`
-    - *document*: this file should be `.jsonl` format, and every data in file should be `{"prefix": xxx, "document": ["value1", "value2"]}`
+  - *sharegpt*: this file should be `.jsonl` format, and every data in file should be `{"id": xxx, "conversation": [{"from": "xxx", "value": "xxx"}]}`
+  - *document*: this file should be `.jsonl` format, and every data in file should be `{"prefix": xxx, "document": ["value1", "value2"]}`
 - **samples_ratio**: the `samples_ratio` represent the dataset up/down sample ratio in one epoch.
 - **columns**: the `columns` represent extra infomation for `sharegpt` formating, if you want to explore more detail info, you can read the code: `LLaMA-Factory-Feb/src/llamafactory/data/parser_feb.py`

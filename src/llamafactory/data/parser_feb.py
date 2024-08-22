@@ -51,26 +51,26 @@ class DatasetAttr:
     split: str = "train"
     folder: Optional[str] = None
     samples_ratio: Optional[float] = None
-    
+
     # common columns
     system: Optional[str] = None
     tools: Optional[str] = None
     images: Optional[str] = None
-    
+
     # rlhf columns
     chosen: Optional[str] = None
     rejected: Optional[str] = None
     kto_tag: Optional[str] = None
-    
+
     # alpaca columns
     prompt: Optional[str] = "instruction"
     query: Optional[str] = "input"
     response: Optional[str] = "output"
     history: Optional[str] = None
-    
+
     # sharegpt columns
     messages: Optional[str] = "conversations"
-    
+
     # sharegpt tags
     role_tag: Optional[str] = "from"
     content_tag: Optional[str] = "value"
@@ -80,7 +80,7 @@ class DatasetAttr:
     function_tag: Optional[str] = "function_call"
     system_tag: Optional[str] = "system"
     mask_tag: Optional[str] = "mask"
-    
+
     # document columns
     prefix: Optional[str] = "prefix_text"
     document: Optional[str] = "document"
@@ -88,11 +88,15 @@ class DatasetAttr:
     def __repr__(self) -> str:
         return self.dataset_name
 
-    def set_attr(self, key: str, obj: Dict[str, Any], default: Optional[Any] = None) -> None:
+    def set_attr(
+        self, key: str, obj: Dict[str, Any], default: Optional[Any] = None
+    ) -> None:
         setattr(self, key, obj.get(key, default))
 
 
-def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -> List["DatasetAttr"]:
+def get_dataset_list(
+    dataset_names: Optional[Sequence[str]], dataset_dir: str
+) -> List["DatasetAttr"]:
     r"""
     Gets the attributes of the datasets.
     """
@@ -103,7 +107,11 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
         dataset_info = None
     else:
         if dataset_dir.startswith("REMOTE:"):
-            config_path = cached_file(path_or_repo_id=dataset_dir[7:], filename=DATA_CONFIG, repo_type="dataset")
+            config_path = cached_file(
+                path_or_repo_id=dataset_dir[7:],
+                filename=DATA_CONFIG,
+                repo_type="dataset",
+            )
         else:
             config_path = os.path.join(dataset_dir, DATA_CONFIG)
 
@@ -112,7 +120,9 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
                 dataset_info = json.load(f)
         except Exception as err:
             if len(dataset_names) != 0:
-                raise ValueError("Cannot open {} due to {}.".format(config_path, str(err)))
+                raise ValueError(
+                    "Cannot open {} due to {}.".format(config_path, str(err))
+                )
 
             dataset_info = None
 
@@ -132,13 +142,21 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
 
         if has_hf_url or has_ms_url:
             if (use_modelscope() and has_ms_url) or (not has_hf_url):
-                dataset_attr = DatasetAttr("ms_hub", dataset_name=dataset_info[name]["ms_hub_url"])
+                dataset_attr = DatasetAttr(
+                    "ms_hub", dataset_name=dataset_info[name]["ms_hub_url"]
+                )
             else:
-                dataset_attr = DatasetAttr("hf_hub", dataset_name=dataset_info[name]["hf_hub_url"])
+                dataset_attr = DatasetAttr(
+                    "hf_hub", dataset_name=dataset_info[name]["hf_hub_url"]
+                )
         elif "script_url" in dataset_info[name]:
-            dataset_attr = DatasetAttr("script", dataset_name=dataset_info[name]["script_url"])
+            dataset_attr = DatasetAttr(
+                "script", dataset_name=dataset_info[name]["script_url"]
+            )
         else:
-            dataset_attr = DatasetAttr("file", dataset_name=dataset_info[name]["file_name"])
+            dataset_attr = DatasetAttr(
+                "file", dataset_name=dataset_info[name]["file_name"]
+            )
 
         dataset_attr.set_attr("stage", dataset_info[name])
         dataset_attr.set_attr("formatting", dataset_info[name], default="sharegpt")
@@ -149,7 +167,14 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
         dataset_attr.set_attr("samples_ratio", dataset_info[name])
 
         if "columns" in dataset_info[name]:
-            column_names = ["system", "tools", "images", "chosen", "rejected", "kto_tag"]
+            column_names = [
+                "system",
+                "tools",
+                "images",
+                "chosen",
+                "rejected",
+                "kto_tag",
+            ]
             if dataset_attr.formatting == "alpaca":
                 column_names.extend(["prompt", "query", "response", "history"])
             elif dataset_attr.formatting == "document":

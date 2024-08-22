@@ -16,10 +16,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Callable, Literal, Optional, Tuple
 
 from .processors.feedback import preprocess_feedback_dataset
-from .processors.pairwise import (
-    preprocess_pairwise_dataset,
-    print_pairwise_dataset_example,
-)
 from .processors.supervised import (
     preprocess_packed_supervised_dataset,
     preprocess_supervised_dataset,
@@ -31,6 +27,8 @@ from .processors.process_text_feb import (
     print_conversation_dataset_example,
     preprocess_instruction_dataset,
     preprocess_pretrain_dataset,
+    preprocess_pairwise_dataset,
+    print_pairwise_dataset_example,
 )
 from .processors.unsupervised import (
     preprocess_unsupervised_dataset,

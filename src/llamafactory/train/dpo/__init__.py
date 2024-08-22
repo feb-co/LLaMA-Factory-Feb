@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .workflow import run_dpo
+from .workflow_feb import run_dpo
 
 
 __all__ = ["run_dpo"]

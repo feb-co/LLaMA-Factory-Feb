@@ -28,11 +28,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 from ...extras.constants import IGNORE_INDEX
 from ...extras.logging import get_logger
 from ..data_utils import Role
-from .processor_utils import (
-    get_paligemma_token_type_ids,
-    get_pixel_values,
-    packing_conversation,
-)
+from .processor_utils import packing_conversation
 
 
 if TYPE_CHECKING:
@@ -119,25 +115,20 @@ def preprocess_conversation_dataset(
     data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     model_inputs = {"input_ids": [], "attention_mask": [], "labels": []}
-    if processor is not None:
-        model_inputs["pixel_values"] = []
-        if hasattr(processor, "image_seq_length"):  # paligemma models
-            model_inputs["token_type_ids"] = []
-
-    for i in range(len(examples["prompt"])):
-        if len(examples["prompt"][i]) % 2 != 1 or len(examples["response"][i]) != 1:
+    for i in range(len(examples["_prompt"])):
+        if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
             logger.warning(
                 "Dropped invalid example: {}".format(
-                    examples["prompt"][i] + examples["response"][i]
+                    examples["_prompt"][i] + examples["_response"][i]
                 )
             )
             continue
 
         system_ids, input_ids, labels = _encode_conversation_example(
-            prompt=examples["prompt"][i],
-            response=examples["response"][i],
-            system=examples["system"][i],
-            tools=examples["tools"][i],
+            prompt=examples["_prompt"][i],
+            response=examples["_response"][i],
+            system=examples["_system"][i],
+            tools=examples["_tools"][i],
             template=template,
             tokenizer=tokenizer,
             processor=processor,
@@ -147,14 +138,8 @@ def preprocess_conversation_dataset(
         model_inputs["input_ids"].append(system_ids + input_ids)
         model_inputs["attention_mask"].append([1] * (len(system_ids) + len(input_ids)))
         model_inputs["labels"].append([IGNORE_INDEX] * len(system_ids) + labels)
-        if processor is not None:
-            model_inputs["pixel_values"].append(
-                get_pixel_values(examples["images"][i], processor)
-            )
-            if hasattr(processor, "image_seq_length"):  # paligemma models
-                model_inputs["token_type_ids"].append(
-                    get_paligemma_token_type_ids(len(input_ids), processor)
-                )
+        model_inputs["images"].append(examples["_images"][i])
+        model_inputs["videos"].append(examples["_videos"][i])
 
     return model_inputs
 
@@ -167,20 +152,20 @@ def preprocess_packed_conversation_dataset(
 ) -> Dict[str, List[List[int]]]:
     batch_input_ids, batch_labels = defaultdict(list), defaultdict(list)
     lengths = defaultdict(list)
-    for i in range(len(examples["prompt"])):
-        if len(examples["prompt"][i]) % 2 != 1 or len(examples["response"][i]) != 1:
+    for i in range(len(examples["_prompt"])):
+        if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
             logger.warning(
                 "Dropped invalid example: {}".format(
-                    examples["prompt"][i] + examples["response"][i]
+                    examples["_prompt"][i] + examples["_response"][i]
                 )
             )
             continue
 
         system_ids, input_ids, labels = _encode_conversation_example(
-            prompt=examples["prompt"][i],
-            response=examples["response"][i],
-            system=examples["system"][i],
-            tools=examples["tools"][i],
+            prompt=examples["_prompt"][i],
+            response=examples["_response"][i],
+            system=examples["_system"][i],
+            tools=examples["_tools"][i],
             template=template,
             tokenizer=tokenizer,
             processor=None,
@@ -339,17 +324,12 @@ def preprocess_instruction_dataset(
     data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
     model_inputs = {"input_ids": [], "attention_mask": [], "labels": []}
-    if processor is not None:
-        model_inputs["pixel_values"] = []
-        if hasattr(processor, "image_seq_length"):  # paligemma models
-            model_inputs["token_type_ids"] = []
-
-    for i in range(len(examples["prompt"])):
+    for i in range(len(examples["_prompt"])):
         prefix_ids, input_ids, labels = _encode_instruction_example(
-            prompt=examples["prompt"][i],
-            response=examples["response"][i],
-            system=examples["system"][i],
-            tools=examples["tools"][i],
+            prompt=examples["_prompt"][i],
+            response=examples["_response"][i],
+            system=examples["_system"][i],
+            tools=examples["_tools"][i],
             template=template,
             tokenizer=tokenizer,
             processor=processor,
@@ -380,15 +360,8 @@ def preprocess_instruction_dataset(
         model_inputs["input_ids"].append(concat_input_ids)
         model_inputs["attention_mask"].append(attention_masks)
         model_inputs["labels"].append(concat_labels)
-
-        if processor is not None:
-            model_inputs["pixel_values"].append(
-                get_pixel_values(examples["images"][i], processor)
-            )
-            if hasattr(processor, "image_seq_length"):  # paligemma models
-                model_inputs["token_type_ids"].append(
-                    get_paligemma_token_type_ids(len(input_ids), processor)
-                )
+        model_inputs["images"].append(examples["_images"][i])
+        model_inputs["videos"].append(examples["_videos"][i])
 
     return model_inputs
 
@@ -404,7 +377,7 @@ def preprocess_pretrain_dataset(
     eos_token = tokenizer.eos_token
     text_examples = [
         tokenizer.bos_token + messages[0]["content"] + eos_token
-        for messages in examples["prompt"]
+        for messages in examples["_prompt"]
     ]
 
     if not data_args.packing:
@@ -529,12 +502,6 @@ def preprocess_pairwise_dataset(
         "rejected_attention_mask": [],
         "rejected_labels": [],
     }
-    if processor is not None:
-        model_inputs["pixel_values"] = []
-        if hasattr(processor, "image_seq_length"):  # paligemma models
-            model_inputs["chosen_token_type_ids"] = []
-            model_inputs["rejected_token_type_ids"] = []
-
     for i in range(len(examples["prompt"])):
         if len(examples["prompt"][i]) % 2 != 1 or len(examples["response"][i]) < 2:
             logger.warning(
@@ -587,51 +554,20 @@ def preprocess_pairwise_dataset(
         model_inputs["rejected_input_ids"].append(rejected_input_ids)
         model_inputs["rejected_attention_mask"].append([1] * len(rejected_input_ids))
         model_inputs["rejected_labels"].append(rejected_labels)
-        if processor is not None:
-            model_inputs["pixel_values"].append(
-                get_pixel_values(examples["images"][i], processor)
-            )
-            if hasattr(processor, "image_seq_length"):  # paligemma models
-                model_inputs["chosen_token_type_ids"].append(
-                    get_paligemma_token_type_ids(len(chosen_input_ids), processor)
-                )
-                model_inputs["rejected_token_type_ids"].append(
-                    get_paligemma_token_type_ids(len(rejected_input_ids), processor)
-                )
+        model_inputs["images"].append(examples["_images"][i])
+        model_inputs["videos"].append(examples["_videos"][i])
 
     return model_inputs
 
 
-def print_pairwise_dataset_example(
-    example: Dict[str, List[int]], tokenizer: "PreTrainedTokenizer"
-) -> None:
-    valid_chosen_labels = list(
-        filter(lambda x: x != IGNORE_INDEX, example["chosen_labels"])
-    )
-    valid_rejected_labels = list(
-        filter(lambda x: x != IGNORE_INDEX, example["rejected_labels"])
-    )
+def print_pairwise_dataset_example(example: Dict[str, List[int]], tokenizer: "PreTrainedTokenizer") -> None:
+    valid_chosen_labels = list(filter(lambda x: x != IGNORE_INDEX, example["chosen_labels"]))
+    valid_rejected_labels = list(filter(lambda x: x != IGNORE_INDEX, example["rejected_labels"]))
     print("chosen_input_ids:\n{}".format(example["chosen_input_ids"]))
-    print(
-        "chosen_inputs:\n{}".format(
-            tokenizer.decode(example["chosen_input_ids"], skip_special_tokens=False)
-        )
-    )
+    print("chosen_inputs:\n{}".format(tokenizer.decode(example["chosen_input_ids"], skip_special_tokens=False)))
     print("chosen_label_ids:\n{}".format(example["chosen_labels"]))
-    print(
-        "chosen_labels:\n{}".format(
-            tokenizer.decode(valid_chosen_labels, skip_special_tokens=False)
-        )
-    )
+    print("chosen_labels:\n{}".format(tokenizer.decode(valid_chosen_labels, skip_special_tokens=False)))
     print("rejected_input_ids:\n{}".format(example["rejected_input_ids"]))
-    print(
-        "rejected_inputs:\n{}".format(
-            tokenizer.decode(example["rejected_input_ids"], skip_special_tokens=False)
-        )
-    )
+    print("rejected_inputs:\n{}".format(tokenizer.decode(example["rejected_input_ids"], skip_special_tokens=False)))
     print("rejected_label_ids:\n{}".format(example["rejected_labels"]))
-    print(
-        "rejected_labels:\n{}".format(
-            tokenizer.decode(valid_rejected_labels, skip_special_tokens=False)
-        )
-    )
+    print("rejected_labels:\n{}".format(tokenizer.decode(valid_rejected_labels, skip_special_tokens=False)))

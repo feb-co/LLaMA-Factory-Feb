@@ -23,7 +23,7 @@
 
 from typing import TYPE_CHECKING, List, Optional
 
-from ...data import PairwiseDataCollatorWithPadding, get_feb_dataset
+from ...data import PairwiseDataCollatorWithPadding, get_feb_dataset, get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
 from ...extras.ploting import plot_loss
 from ...hparams import ModelArguments
@@ -47,13 +47,15 @@ def run_dpo(
 ):
     tokenizer_module = load_tokenizer_feb(model_args)
     tokenizer = tokenizer_module["tokenizer"]
-    dataset_module = get_feb_dataset(model_args, data_args, training_args, **tokenizer_module)
+    template = get_template_and_fix_tokenizer(tokenizer, data_args)
+    dataset_module = get_feb_dataset(template, model_args, data_args, training_args, **tokenizer_module)
     model = load_model_feb(tokenizer, model_args, finetuning_args, training_args.do_train)
 
     data_collator = PairwiseDataCollatorWithPadding(
-        tokenizer=tokenizer,
+        template=template,
         pad_to_multiple_of=8,
         label_pad_token_id=IGNORE_INDEX if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id,
+        **tokenizer_module,
     )
 
     # Create reference model
@@ -66,7 +68,7 @@ def run_dpo(
         ref_model = None
 
     # Update arguments
-    training_args.remove_unused_columns = False  # important for pairwise dataset
+    training_args.remove_unused_columns = False  # important for multimodal and pairwise dataset
 
     # Initialize our Trainer
     trainer = CustomDPOTrainer(

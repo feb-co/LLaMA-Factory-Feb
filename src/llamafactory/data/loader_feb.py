@@ -24,7 +24,7 @@
 
 import os
 import sys
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Union
+from typing import TYPE_CHECKING, Dict, Literal, Optional, Sequence, Union
 
 import numpy as np
 from datasets import DatasetDict, load_dataset, load_from_disk
@@ -35,7 +35,6 @@ from ..extras.logging import get_logger
 from ..extras.misc import has_tokenized_data
 from .data_utils import merge_dataset, split_dataset
 from .preprocess import get_preprocess_and_print_func
-from .template import get_template_and_fix_tokenizer
 
 from .aligner_feb import align_dataset
 from .parser_feb import get_dataset_list
@@ -210,18 +209,13 @@ def _get_preprocessed_dataset(
 
 
 def get_dataset(
+    template: "Template",
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
 ) -> "DatasetModule":
-    template = get_template_and_fix_tokenizer(
-        tokenizer, data_args.template, data_args.tool_format
-    )
-    if data_args.train_on_prompt and template.efficient_eos:
-        raise ValueError("Current template does not support `train_on_prompt`.")
-
     # Load tokenized dataset
     if data_args.tokenized_path is not None:
         if has_tokenized_data(data_args.tokenized_path):

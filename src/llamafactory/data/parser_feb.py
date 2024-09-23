@@ -56,6 +56,7 @@ class DatasetAttr:
     system: Optional[str] = None
     tools: Optional[str] = None
     images: Optional[str] = None
+    videos: Optional[str] = None
 
     # rlhf columns
     chosen: Optional[str] = None
@@ -171,6 +172,7 @@ def get_dataset_list(
                 "system",
                 "tools",
                 "images",
+                "videos",
                 "chosen",
                 "rejected",
                 "kto_tag",

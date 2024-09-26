@@ -360,8 +360,6 @@ def preprocess_instruction_dataset(
         model_inputs["input_ids"].append(concat_input_ids)
         model_inputs["attention_mask"].append(attention_masks)
         model_inputs["labels"].append(concat_labels)
-        model_inputs["images"].append(examples["_images"][i])
-        model_inputs["videos"].append(examples["_videos"][i])
 
     return model_inputs
 
@@ -554,8 +552,6 @@ def preprocess_pairwise_dataset(
         model_inputs["rejected_input_ids"].append(rejected_input_ids)
         model_inputs["rejected_attention_mask"].append([1] * len(rejected_input_ids))
         model_inputs["rejected_labels"].append(rejected_labels)
-        model_inputs["images"].append(examples["_images"][i])
-        model_inputs["videos"].append(examples["_videos"][i])
 
     return model_inputs
 

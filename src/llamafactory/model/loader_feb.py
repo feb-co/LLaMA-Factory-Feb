@@ -29,7 +29,7 @@ from trl import AutoModelForCausalLMWithValueHead
 
 from ..extras.logging import get_logger
 from ..extras.misc import count_parameters, skip_check_imports, try_download_model_from_ms
-from .adapter import init_adapter
+from .adapter_feb import init_adapter, peft_config
 from .model_utils.misc import register_autoclass
 from .model_utils.mod import convert_pretrained_model_to_mod, load_mod_pretrained_model
 from .model_utils.unsloth import load_unsloth_pretrained_model
@@ -144,6 +144,7 @@ def load_model(
     init_kwargs = _get_init_kwargs(model_args)
     config = load_config(model_args)
     patch_config(config, tokenizer, model_args, init_kwargs, is_trainable)
+    peft_config(finetuning_args)
 
     model = None
     lazy_load = False

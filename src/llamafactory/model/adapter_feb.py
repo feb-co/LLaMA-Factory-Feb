@@ -315,10 +315,10 @@ def peft_config(
 
     if finetuning_args.additional_target is not None:
         peft.utils.ModulesToSaveWrapper.update = modules_wrapper_update_fn
-
+    
 
 def modules_wrapper_update_fn(self: ModulesToSaveWrapper, adapter_name: str):
-    self.modules_to_save.update(torch.nn.ModuleDict({adapter_name: copy.deepcopy(self.original_module)}))
+    self.modules_to_save.update(torch.nn.ModuleDict({adapter_name: self.original_module}))
 
     if hasattr(self.modules_to_save[adapter_name], "_hf_hook"):
         old_hook = self.modules_to_save[adapter_name]._hf_hook

@@ -135,6 +135,8 @@ def _patch_for_block_diag_attn(model_type: str) -> None:
         transformers.models.llama.modeling_llama._get_unpad_data = get_unpad_data
     elif model_type == "mistral":
         transformers.models.mistral.modeling_mistral._get_unpad_data = get_unpad_data
+    elif model_type == "mixtral":
+        transformers.models.mixtral.modeling_mixtral._get_unpad_data = get_unpad_data        
     elif model_type == "phi":
         transformers.models.phi.modeling_phi._get_unpad_data = get_unpad_data
     elif model_type == "phi3":

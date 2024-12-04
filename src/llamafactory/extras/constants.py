@@ -87,6 +87,7 @@ SUPPORTED_CLASS_FOR_BLOCK_DIAG_ATTN = {
     "gemma2",
     "llama",
     "mistral",
+    "mixtral",
     "phi",
     "phi3",
     "qwen2",

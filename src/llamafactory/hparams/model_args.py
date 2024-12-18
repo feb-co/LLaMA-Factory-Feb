@@ -15,10 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import asdict, dataclass, field, fields
+import json
+from dataclasses import dataclass, field, fields
 from typing import Any, Dict, Literal, Optional, Union
 
 import torch
+from transformers.training_args import _convert_str_dict
 from typing_extensions import Self
 
 
@@ -57,12 +59,12 @@ class ProcessorArguments:
     """
 
     image_resolution: int = field(
-        default=512,
-        metadata={"help": "Keeps the height or width of image below this resolution."},
+        default=512 * 512,
+        metadata={"help": "Keeps the number of pixels of image below this resolution."},
     )
     video_resolution: int = field(
-        default=128,
-        metadata={"help": "Keeps the height or width of video below this resolution."},
+        default=128 * 128,
+        metadata={"help": "Keeps the number of pixels of video below this resolution."},
     )
     video_fps: float = field(
         default=2.0,
@@ -125,7 +127,7 @@ class VllmArguments:
     """
 
     vllm_maxlen: int = field(
-        default=2048,
+        default=4096,
         metadata={"help": "Maximum sequence (prompt + response) length of the vLLM engine."},
     )
     vllm_gpu_util: float = field(
@@ -139,6 +141,10 @@ class VllmArguments:
     vllm_max_lora_rank: int = field(
         default=32,
         metadata={"help": "Maximum rank of all LoRAs in the vLLM engine."},
+    )
+    vllm_config: Optional[Union[dict, str]] = field(
+        default=None,
+        metadata={"help": "Config to initialize the vllm engine. Please use JSON strings."},
     )
 
 
@@ -231,6 +237,10 @@ class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments,
         default=False,
         metadata={"help": "Whether or not to disable gradient checkpointing."},
     )
+    use_reentrant_gc: bool = field(
+        default=True,
+        metadata={"help": "Whether or not to use reentrant gradient checkpointing."},
+    )
     upcast_layernorm: bool = field(
         default=False,
         metadata={"help": "Whether or not to upcast the layernorm weights in fp32."},
@@ -267,9 +277,17 @@ class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments,
         default=None,
         metadata={"help": "Auth token to log in with ModelScope Hub."},
     )
+    om_hub_token: Optional[str] = field(
+        default=None,
+        metadata={"help": "Auth token to log in with Modelers Hub."},
+    )
     print_param_status: bool = field(
         default=False,
         metadata={"help": "For debugging purposes, print the status of the parameters in the model."},
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={"help": "Whether to trust the execution of code from datasets/models defined on the Hub or not."},
     )
     compute_dtype: Optional[torch.dtype] = field(
         default=None,
@@ -308,20 +326,21 @@ class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments,
         if self.export_quantization_bit is not None and self.export_quantization_dataset is None:
             raise ValueError("Quantization dataset is necessary for exporting.")
 
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        if isinstance(self.vllm_config, str) and self.vllm_config.startswith("{"):
+            self.vllm_config = _convert_str_dict(json.loads(self.vllm_config))
 
     @classmethod
-    def copyfrom(cls, old_arg: "Self", **kwargs) -> "Self":
-        arg_dict = old_arg.to_dict()
-        arg_dict.update(**kwargs)
-        for attr in fields(cls):
-            if not attr.init:
-                arg_dict.pop(attr.name)
+    def copyfrom(cls, source: "Self", **kwargs) -> "Self":
+        init_args, lazy_args = {}, {}
+        for attr in fields(source):
+            if attr.init:
+                init_args[attr.name] = getattr(source, attr.name)
+            else:
+                lazy_args[attr.name] = getattr(source, attr.name)
 
-        new_arg = cls(**arg_dict)
-        new_arg.compute_dtype = old_arg.compute_dtype
-        new_arg.device_map = old_arg.device_map
-        new_arg.model_max_length = old_arg.model_max_length
-        new_arg.block_diag_attn = old_arg.block_diag_attn
-        return new_arg
+        init_args.update(kwargs)
+        result = cls(**init_args)
+        for name, value in lazy_args.items():
+            setattr(result, name, value)
+
+        return result

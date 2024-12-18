@@ -25,8 +25,9 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
+
+from ...extras import logging
 from ...extras.constants import IGNORE_INDEX
-from ...extras.logging import get_logger
 from ..data_utils import Role
 from .processor_utils import packing_conversation
 
@@ -35,10 +36,11 @@ if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer, ProcessorMixin
 
     from ...hparams import DataArguments
+    from ..mm_plugin import ImageInput, VideoInput
     from ..template import Template
 
 
-logger = get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 # """
@@ -71,9 +73,7 @@ def _encode_conversation_example(
         labels += [IGNORE_INDEX] * getattr(processor, "image_seq_length")
 
     prefix_ids = template.encode_system(tokenizer=tokenizer, system=system, tools=tools)
-    encoded_pairs = template.encode_multiturn(
-        tokenizer=tokenizer, messages=messages, system=None, tools=None
-    )
+    encoded_pairs = template.encode_multiturn(tokenizer=tokenizer, messages=messages, system=None, tools=None)
     text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
     for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
         source_len = len(source_ids)
@@ -100,10 +100,7 @@ def _encode_conversation_example(
         input_ids += [tokenizer.eos_token_id]
         labels += [tokenizer.eos_token_id]
 
-    assert len(input_ids) == len(
-        labels
-    ), "The length of input_ids should equal with labels' length!"
-
+    assert len(input_ids) == len(labels), "The length of input_ids should equal with labels' length!"
     return prefix_ids, input_ids, labels
 
 
@@ -114,13 +111,13 @@ def preprocess_conversation_dataset(
     processor: Optional["ProcessorMixin"],
     data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
+    # build inputs with format `<bos> X Y <eos>` and labels with format `<ignore> ... <ignore> Y <eos>`
+    # for multiturn examples, we only mask the prompt part in each prompt-response pair.
     model_inputs = {"input_ids": [], "attention_mask": [], "labels": []}
     for i in range(len(examples["_prompt"])):
         if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
-            logger.warning(
-                "Dropped invalid example: {}".format(
-                    examples["_prompt"][i] + examples["_response"][i]
-                )
+            logger.warning_rank0(
+                "Dropped invalid example: {}".format(examples["_prompt"][i] + examples["_response"][i])
             )
             continue
 
@@ -150,14 +147,15 @@ def preprocess_packed_conversation_dataset(
     tokenizer: "PreTrainedTokenizer",
     data_args: "DataArguments",
 ) -> Dict[str, List[List[int]]]:
+    # TODO: use `position_ids` to achieve packing
+    # build inputs with format `<bos> X1 Y1 <eos> <bos> X2 Y2 <eos>`
+    # and labels with format `<ignore> ... <ignore> Y1 <eos> <ignore> ... <ignore> Y2 <eos>`
     batch_input_ids, batch_labels = defaultdict(list), defaultdict(list)
     lengths = defaultdict(list)
     for i in range(len(examples["_prompt"])):
         if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
-            logger.warning(
-                "Dropped invalid example: {}".format(
-                    examples["_prompt"][i] + examples["_response"][i]
-                )
+            logger.warning_rank0(
+                "Dropped invalid example: {}".format(examples["_prompt"][i] + examples["_response"][i])
             )
             continue
 

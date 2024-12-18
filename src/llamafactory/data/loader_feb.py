@@ -30,8 +30,8 @@ import numpy as np
 from datasets import DatasetDict, load_dataset, load_from_disk
 from transformers.utils.versions import require_version
 
+from ..extras import logging
 from ..extras.constants import FILEEXT2TYPE
-from ..extras.logging import get_logger
 from ..extras.misc import has_tokenized_data
 from .data_utils import merge_dataset, split_dataset
 from .preprocess import get_preprocess_and_print_func
@@ -41,11 +41,7 @@ from .parser_feb import get_dataset_list
 
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
-    from transformers import (
-        PreTrainedTokenizer,
-        ProcessorMixin,
-        Seq2SeqTrainingArguments,
-    )
+    from transformers import PreTrainedTokenizer, ProcessorMixin, Seq2SeqTrainingArguments
 
     from ..hparams import DataArguments, ModelArguments
     from .data_utils import DatasetModule
@@ -54,7 +50,7 @@ if TYPE_CHECKING:
     from .parser_feb import DatasetAttr
 
 
-logger = get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def _load_single_dataset(
@@ -63,9 +59,12 @@ def _load_single_dataset(
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
 ) -> Union["Dataset", "IterableDataset"]:
-    logger.info("Loading dataset {}...".format(dataset_attr))
+    r"""
+    Loads a single dataset and aligns it to the standard format.
+    """
+    logger.info_rank0(f"Loading dataset {dataset_attr}...")
     data_path, data_name, data_dir, data_files = None, None, None, None
-    if dataset_attr.load_from in ["hf_hub", "ms_hub"]:
+    if dataset_attr.load_from in ["hf_hub", "ms_hub", "om_hub"]:
         data_path = dataset_attr.dataset_name
         data_name = dataset_attr.subset
         data_dir = dataset_attr.folder
@@ -81,29 +80,24 @@ def _load_single_dataset(
         if os.path.isdir(local_path):  # is directory
             for file_name in os.listdir(local_path):
                 data_files.append(os.path.join(local_path, file_name))
-                if data_path is None:
-                    data_path = FILEEXT2TYPE.get(file_name.split(".")[-1], None)
-                elif data_path != FILEEXT2TYPE.get(file_name.split(".")[-1], None):
-                    raise ValueError("File types should be identical.")
         elif os.path.isfile(local_path):  # is file
             data_files.append(local_path)
-            data_path = FILEEXT2TYPE.get(local_path.split(".")[-1], None)
         else:
-            raise ValueError("File {} not found.".format(local_path))
+            raise ValueError(f"File {local_path} not found.")
 
+        data_path = FILEEXT2TYPE.get(os.path.splitext(data_files[0])[-1][1:], None)
         if data_path is None:
-            raise ValueError(
-                "Allowed file types: {}.".format(",".join(FILEEXT2TYPE.keys()))
-            )
+            raise ValueError("Allowed file types: {}.".format(",".join(FILEEXT2TYPE.keys())))
+
+        if any(data_path != FILEEXT2TYPE.get(os.path.splitext(data_file)[-1][1:], None) for data_file in data_files):
+            raise ValueError("File types should be identical.")
     else:
-        raise NotImplementedError(
-            "Unknown load type: {}.".format(dataset_attr.load_from)
-        )
+        raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
     if dataset_attr.load_from == "ms_hub":
         require_version("modelscope>=1.11.0", "To fix: pip install modelscope>=1.11.0")
-        from modelscope import MsDataset
-        from modelscope.utils.config_ds import MS_DATASETS_CACHE
+        from modelscope import MsDataset  # type: ignore
+        from modelscope.utils.config_ds import MS_DATASETS_CACHE  # type: ignore
 
         cache_dir = model_args.cache_dir or MS_DATASETS_CACHE
         dataset = MsDataset.load(
@@ -114,10 +108,27 @@ def _load_single_dataset(
             split=dataset_attr.split,
             cache_dir=cache_dir,
             token=model_args.ms_hub_token,
-            use_streaming=(data_args.streaming and (dataset_attr.load_from != "file")),
+            use_streaming=data_args.streaming,
         )
         if isinstance(dataset, MsDataset):
             dataset = dataset.to_hf_dataset()
+
+    elif dataset_attr.load_from == "om_hub":
+        require_version("openmind>=0.8.0", "To fix: pip install openmind>=0.8.0")
+        from openmind import OmDataset  # type: ignore
+        from openmind.utils.hub import OM_DATASETS_CACHE  # type: ignore
+
+        cache_dir = model_args.cache_dir or OM_DATASETS_CACHE
+        dataset = OmDataset.load_dataset(
+            path=data_path,
+            name=data_name,
+            data_dir=data_dir,
+            data_files=data_files,
+            split=dataset_attr.split,
+            cache_dir=cache_dir,
+            token=model_args.om_hub_token,
+            streaming=data_args.streaming,
+        )
     else:
         dataset = load_dataset(
             path=data_path,
@@ -127,19 +138,15 @@ def _load_single_dataset(
             split=dataset_attr.split,
             cache_dir=model_args.cache_dir,
             token=model_args.hf_hub_token,
-            streaming=(data_args.streaming and (dataset_attr.load_from != "file")),
-            trust_remote_code=True
+            streaming=data_args.streaming,
+            num_proc=data_args.preprocessing_num_workers,
+            trust_remote_code=model_args.trust_remote_code,
         )
-
-    if data_args.streaming and (
-        dataset_attr.load_from == "file"
-    ):  # faster than specifying streaming=True
-        dataset = dataset.to_iterable_dataset()  # TODO: add num shards parameter
 
     # samplse dataset
     if dataset_attr.samples_ratio is not None and not data_args.streaming:
         target_num = int(len(dataset) * dataset_attr.samples_ratio)
-        indexes = np.random.permutation(len(dataset))[:target_num]
+        indexes = np.random.permutation(len(dataset))[:target_num]  # all samples should be included
         remaining_num = target_num - len(indexes)
         if remaining_num > 0:
             expand_indexes = np.random.choice(len(dataset), remaining_num)
@@ -147,14 +154,9 @@ def _load_single_dataset(
 
         assert len(indexes) == target_num, "Sample num mismatched."
         dataset = dataset.select(indexes)
-        logger.info(
-            "Sampled {} examples from dataset {}.".format(
-                target_num, dataset_attr
-            )
-        )
+        logger.info_rank0(f"Sampled {target_num} examples from dataset {dataset_attr}.")
 
-    # truncate dataset
-    if data_args.max_samples is not None:
+    if data_args.max_samples is not None:  # truncate dataset
         max_samples = min(data_args.max_samples, len(dataset))
         dataset = dataset.select(range(max_samples))
 
@@ -171,29 +173,29 @@ def _get_preprocessed_dataset(
     processor: Optional["ProcessorMixin"] = None,
     is_eval: bool = False,
 ) -> Optional[Union["Dataset", "IterableDataset"]]:
+    r"""
+    Preprocesses the dataset, including format checking and tokenization.
+    """
     if dataset is None:
         return None
 
     preprocess_func, print_function = get_preprocess_and_print_func(
-        data_args,
-        stage,
-        template,
-        tokenizer,
-        processor,
-        do_generate=(training_args.predict_with_generate and is_eval),
+        data_args, stage, template, tokenizer, processor, do_generate=(training_args.predict_with_generate and is_eval)
     )
     column_names = list(next(iter(dataset)).keys())
     kwargs = {}
     if not data_args.streaming:
         kwargs = dict(
             num_proc=data_args.preprocessing_num_workers,
-            load_from_cache_file=(not data_args.overwrite_cache)
-            or (training_args.local_process_index != 0),
+            load_from_cache_file=(not data_args.overwrite_cache) or (training_args.local_process_index != 0),
             desc="Running tokenizer on dataset",
         )
 
     dataset = dataset.map(
-        preprocess_func, batched=True, remove_columns=column_names, **kwargs
+        preprocess_func,
+        batched=True,
+        remove_columns=column_names,
+        **kwargs,
     )
 
     if training_args.should_log:
@@ -201,9 +203,10 @@ def _get_preprocessed_dataset(
             print(f"{stage} eval example:" if is_eval else f"{stage} training example:", flush=True)
             print_function(next(iter(dataset)))
         except StopIteration:
-            raise RuntimeError(
-                "Cannot find valid samples, check `data/README.md` for the data format."
-            )
+            if stage == "pt":
+                raise RuntimeError("Cannot find sufficient samples, consider increasing dataset size.")
+            else:
+                raise RuntimeError("Cannot find valid samples, check `data/README.md` for the data format.")
 
     return dataset
 
@@ -216,27 +219,29 @@ def get_dataset(
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
 ) -> "DatasetModule":
+    r"""
+    Gets the train dataset and optionally gets the evaluation dataset.
+    """
     # Load tokenized dataset
     if data_args.tokenized_path is not None:
         if has_tokenized_data(data_args.tokenized_path):
-            logger.warning(
-                "Loading dataset from disk will ignore other data arguments."
-            )
-            dataset_dict: "DatasetDict" = load_from_disk(data_args.tokenized_path)
-            logger.info(
-                "Loaded tokenized dataset from {}.".format(data_args.tokenized_path)
-            )
+            logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
+            tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(data_args.tokenized_path)
+            logger.info_rank0(f"Loaded tokenized dataset from {data_args.tokenized_path}.")
 
             dataset_module: Dict[str, "Dataset"] = {}
-            if "train" in dataset_dict:
-                dataset_module["train_dataset"] = dataset_dict["train"]
-            if "validation" in dataset_dict:
-                dataset_module["eval_dataset"] = dataset_dict["validation"]
+            if isinstance(tokenized_data, DatasetDict):
+                if "train" in tokenized_data:
+                    dataset_module["train_dataset"] = tokenized_data["train"]
+
+                if "validation" in tokenized_data:
+                    dataset_module["eval_dataset"] = tokenized_data["validation"]
+
+            else:  # Dataset
+                dataset_module["train_dataset"] = tokenized_data
 
             if data_args.streaming:
-                dataset_module = {
-                    k: v.to_iterable_dataset() for k, v in dataset_module.items()
-                }
+                dataset_module = {k: v.to_iterable_dataset() for k, v in dataset_module.items()}
 
             return dataset_module
 
@@ -283,9 +288,7 @@ def get_dataset(
         dataset_dict = {}
         if dataset is not None:
             if data_args.streaming:
-                dataset = dataset.shuffle(
-                    buffer_size=data_args.buffer_size, seed=training_args.seed
-                )
+                dataset = dataset.shuffle(buffer_size=data_args.buffer_size, seed=training_args.seed)
 
             dataset_dict["train"] = dataset
 
@@ -293,14 +296,8 @@ def get_dataset(
 
     if data_args.tokenized_path is not None:
         dataset_dict.save_to_disk(data_args.tokenized_path)
-        logger.info(
-            "Tokenized dataset saved at {}.".format(data_args.tokenized_path)
-        )
-        logger.info(
-            "Please restart the training with `tokenized_path: {}`.".format(
-                data_args.tokenized_path
-            )
-        )
+        logger.info_rank0(f"Tokenized dataset saved at {data_args.tokenized_path}.")
+        logger.info_rank0(f"Please restart the training with `tokenized_path: {data_args.tokenized_path}`.")
 
         sys.exit(0)
 

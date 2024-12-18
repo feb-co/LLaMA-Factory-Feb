@@ -32,8 +32,8 @@ from . import launcher
 from .api.app import run_api
 from .chat.chat_model import run_chat
 from .eval.evaluator import run_eval
+from .extras import logging
 from .extras.env import VERSION, print_env
-from .extras.logging import get_logger
 from .extras.misc import get_device_count
 from .train.tuner import export_model, run_exp
 from .webui.interface import run_web_demo, run_web_ui
@@ -58,7 +58,7 @@ USAGE = (
 WELCOME = (
     "-" * 58
     + "\n"
-    + "| Welcome to LLaMA Factory, version {}".format(VERSION)
+    + f"| Welcome to LLaMA Factory, version {VERSION}"
     + " " * (21 - len(VERSION))
     + "|\n|"
     + " " * 56
@@ -67,7 +67,7 @@ WELCOME = (
     + "-" * 58
 )
 
-logger = get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @unique
@@ -130,4 +130,4 @@ def main():
     elif command == Command.HELP:
         print(USAGE)
     else:
-        raise NotImplementedError("Unknown command: {}.".format(command))
+        raise NotImplementedError(f"Unknown command: {command}.")

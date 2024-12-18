@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Literal, Optional, Sequence
 from transformers.utils import cached_file
 
 from ..extras.constants import DATA_CONFIG
-from ..extras.misc import use_modelscope
+from ..extras.misc import use_modelscope, use_openmind
 
 
 @dataclass
@@ -40,7 +40,7 @@ class DatasetAttr:
     """
 
     # basic configs
-    load_from: Literal["hf_hub", "ms_hub", "script", "file"]
+    load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file"]
     dataset_name: str
     stage: Literal["pretrain", "conversation", "instruction"] = "conversation"
     formatting: Literal["alpaca", "sharegpt", "document"] = "sharegpt"
@@ -89,15 +89,12 @@ class DatasetAttr:
     def __repr__(self) -> str:
         return self.dataset_name
 
-    def set_attr(
-        self, key: str, obj: Dict[str, Any], default: Optional[Any] = None
-    ) -> None:
+    def set_attr(self, key: str, obj: Dict[str, Any], default: Optional[Any] = None) -> None:
         setattr(self, key, obj.get(key, default))
 
 
-def get_dataset_list(
-    dataset_names: Optional[Sequence[str]], dataset_dir: str
-) -> List["DatasetAttr"]:
+
+def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -> List["DatasetAttr"]:
     r"""
     Gets the attributes of the datasets.
     """
@@ -108,56 +105,50 @@ def get_dataset_list(
         dataset_info = None
     else:
         if dataset_dir.startswith("REMOTE:"):
-            config_path = cached_file(
-                path_or_repo_id=dataset_dir[7:],
-                filename=DATA_CONFIG,
-                repo_type="dataset",
-            )
+            config_path = cached_file(path_or_repo_id=dataset_dir[7:], filename=DATA_CONFIG, repo_type="dataset")
         else:
             config_path = os.path.join(dataset_dir, DATA_CONFIG)
 
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 dataset_info = json.load(f)
         except Exception as err:
             if len(dataset_names) != 0:
-                raise ValueError(
-                    "Cannot open {} due to {}.".format(config_path, str(err))
-                )
+                raise ValueError(f"Cannot open {config_path} due to {str(err)}.")
 
             dataset_info = None
 
     dataset_list: List["DatasetAttr"] = []
     for name in dataset_names:
         if dataset_info is None:  # dataset_dir is ONLINE
-            load_from = "ms_hub" if use_modelscope() else "hf_hub"
+            if use_modelscope():
+                load_from = "ms_hub"
+            elif use_openmind():
+                load_from = "om_hub"
+            else:
+                load_from = "hf_hub"
             dataset_attr = DatasetAttr(load_from, dataset_name=name)
             dataset_list.append(dataset_attr)
             continue
 
         if name not in dataset_info:
-            raise ValueError("Undefined dataset {} in {}.".format(name, DATA_CONFIG))
+            raise ValueError(f"Undefined dataset {name} in {DATA_CONFIG}.")
 
         has_hf_url = "hf_hub_url" in dataset_info[name]
         has_ms_url = "ms_hub_url" in dataset_info[name]
+        has_om_url = "om_hub_url" in dataset_info[name]
 
-        if has_hf_url or has_ms_url:
-            if (use_modelscope() and has_ms_url) or (not has_hf_url):
-                dataset_attr = DatasetAttr(
-                    "ms_hub", dataset_name=dataset_info[name]["ms_hub_url"]
-                )
+        if has_hf_url or has_ms_url or has_om_url:
+            if has_ms_url and (use_modelscope() or not has_hf_url):
+                dataset_attr = DatasetAttr("ms_hub", dataset_name=dataset_info[name]["ms_hub_url"])
+            elif has_om_url and (use_openmind() or not has_hf_url):
+                dataset_attr = DatasetAttr("om_hub", dataset_name=dataset_info[name]["om_hub_url"])
             else:
-                dataset_attr = DatasetAttr(
-                    "hf_hub", dataset_name=dataset_info[name]["hf_hub_url"]
-                )
+                dataset_attr = DatasetAttr("hf_hub", dataset_name=dataset_info[name]["hf_hub_url"])
         elif "script_url" in dataset_info[name]:
-            dataset_attr = DatasetAttr(
-                "script", dataset_name=dataset_info[name]["script_url"]
-            )
+            dataset_attr = DatasetAttr("script", dataset_name=dataset_info[name]["script_url"])
         else:
-            dataset_attr = DatasetAttr(
-                "file", dataset_name=dataset_info[name]["file_name"]
-            )
+            dataset_attr = DatasetAttr("file", dataset_name=dataset_info[name]["file_name"])
 
         dataset_attr.set_attr("stage", dataset_info[name])
         dataset_attr.set_attr("formatting", dataset_info[name], default="sharegpt")
@@ -168,15 +159,7 @@ def get_dataset_list(
         dataset_attr.set_attr("samples_ratio", dataset_info[name])
 
         if "columns" in dataset_info[name]:
-            column_names = [
-                "system",
-                "tools",
-                "images",
-                "videos",
-                "chosen",
-                "rejected",
-                "kto_tag",
-            ]
+            column_names = ["system", "tools", "images", "videos", "chosen", "rejected", "kto_tag"]
             if dataset_attr.formatting == "alpaca":
                 column_names.extend(["prompt", "query", "response", "history"])
             elif dataset_attr.formatting == "document":

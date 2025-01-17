@@ -1,5 +1,5 @@
 #
-# Created on Sat Aug 03 2024
+# Created on Sat Jan 01 2025
 #
 # Licheng Wang (FEB team)
 #
@@ -24,7 +24,8 @@
 
 from typing import TYPE_CHECKING, List, Optional
 
-from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset, get_template_and_fix_tokenizer
+from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset
+from ...data.template_feb import get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
 from ...extras.logging import get_logger
 from ...extras.misc import calculate_tps, get_logits_processor
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def run_sft_mix(
+def run_sft_mix_voice(
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
@@ -54,7 +55,7 @@ def run_sft_mix(
 ):
     tokenizer_module = load_tokenizer_feb(model_args)
     tokenizer = tokenizer_module["tokenizer"]
-    template = get_template_and_fix_tokenizer(tokenizer, data_args)
+    template = get_template_and_fix_tokenizer(tokenizer, data_args, is_avater_tokenizer=True)
     dataset_module = get_feb_dataset(template, model_args, data_args, training_args, **tokenizer_module)
     model = load_model_feb(tokenizer, model_args, finetuning_args, training_args.do_train)
 
@@ -99,8 +100,8 @@ def run_sft_mix(
 
     # Keyword arguments for `model.generate`
     gen_kwargs = generating_args.to_dict()
-    gen_kwargs["eos_token_id"] = [tokenizer.eos_token_id] + tokenizer.additional_special_tokens_ids
-    gen_kwargs["pad_token_id"] = tokenizer.pad_token_id
+    gen_kwargs["eos_token_id"] = [tokenizer.text_tokenizer.eos_token_id]
+    gen_kwargs["eoa_token_id"] = [tokenizer.audio_special_token["eoa_token"]]
     gen_kwargs["logits_processor"] = get_logits_processor()
 
     # Training

@@ -42,8 +42,8 @@ class DatasetAttr:
     # basic configs
     load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file"]
     dataset_name: str
-    stage: Literal["pretrain", "conversation", "instruction"] = "conversation"
-    formatting: Literal["alpaca", "sharegpt", "document"] = "sharegpt"
+    stage: Literal["pretrain", "conversation", "instruction", "avater_audio"] = "conversation"
+    formatting: Literal["alpaca", "sharegpt", "document", "audio"] = "sharegpt"
     ranking: bool = False
 
     # extra configs
@@ -81,6 +81,7 @@ class DatasetAttr:
     function_tag: Optional[str] = "function_call"
     system_tag: Optional[str] = "system"
     mask_tag: Optional[str] = "mask"
+    audio_tag: Optional[str] = "audios"
 
     # document columns
     prefix: Optional[str] = "prefix_text"

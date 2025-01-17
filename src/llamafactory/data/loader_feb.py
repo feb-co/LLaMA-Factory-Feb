@@ -186,7 +186,7 @@ def _get_preprocessed_dataset(
     kwargs = {}
     if not data_args.streaming:
         kwargs = dict(
-            num_proc=data_args.preprocessing_num_workers,
+            num_proc=data_args.preprocessing_num_workers if stage != "avater_audio" else 1,
             load_from_cache_file=(not data_args.overwrite_cache) or (training_args.local_process_index != 0),
             desc="Running tokenizer on dataset",
         )

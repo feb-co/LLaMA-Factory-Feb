@@ -29,6 +29,8 @@ from .processors.process_text_feb import (
     preprocess_pretrain_dataset,
     preprocess_pairwise_dataset,
     print_pairwise_dataset_example,
+    preprocess_avater_audio_dataset,
+    print_avater_audio_dataset_example
 )
 from .processors.unsupervised import (
     preprocess_unsupervised_dataset,
@@ -46,7 +48,7 @@ if TYPE_CHECKING:
 def get_preprocess_and_print_func(
     data_args: "DataArguments",
     stage: Literal[
-        "pt", "sft", "rm", "ppo", "kto", "pretrain", "conversation", "instruction"
+        "pt", "sft", "rm", "ppo", "kto", "pretrain", "conversation", "instruction", "avater_audio"
     ],
     template: "Template",
     tokenizer: "PreTrainedTokenizer",
@@ -151,6 +153,17 @@ def get_preprocess_and_print_func(
         )
         print_function = partial(
             print_conversation_dataset_example, tokenizer=tokenizer
+        )
+    elif stage == "avater_audio":
+        preprocess_func = partial(
+            preprocess_avater_audio_dataset,
+            template=template,
+            tokenizer=tokenizer,
+            processor=processor,
+            data_args=data_args,
+        )
+        print_function = partial(
+            print_avater_audio_dataset_example, tokenizer=tokenizer
         )
     else:
         preprocess_func = partial(

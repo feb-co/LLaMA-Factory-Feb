@@ -172,7 +172,7 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
     if finetuning_args.stage != "pt" and data_args.template is None:
         raise ValueError("Please specify which `template` to use.")
 
-    if finetuning_args.stage not in ("sft", "sft_mix"):
+    if finetuning_args.stage not in ("sft", "sft_mix", "sft_mix_voice"):
         if training_args.predict_with_generate:
             raise ValueError("`predict_with_generate` cannot be set as True except SFT.")
 

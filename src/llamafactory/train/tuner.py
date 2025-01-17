@@ -42,6 +42,7 @@ from .pt import run_pt
 from .rm import run_rm
 from .sft import run_sft
 from .sft_mix import run_sft_mix
+from .sft_mix_voice import run_sft_mix_voice
 
 
 if TYPE_CHECKING:
@@ -69,6 +70,8 @@ def run_exp(args: Optional[Dict[str, Any]] = None, callbacks: List["TrainerCallb
         run_kto(model_args, data_args, training_args, finetuning_args, callbacks)
     elif finetuning_args.stage == "sft_mix":
         run_sft_mix(model_args, data_args, training_args, finetuning_args, generating_args, callbacks)
+    elif finetuning_args.stage == "sft_mix_voice":
+        run_sft_mix_voice(model_args, data_args, training_args, finetuning_args, generating_args, callbacks)
     else:
         raise ValueError(f"Unknown task: {finetuning_args.stage}.")
 

@@ -29,6 +29,8 @@ from .processors.process_text_feb import (
     preprocess_pretrain_dataset,
     preprocess_pairwise_dataset,
     print_pairwise_dataset_example,
+)
+from .processors.process_audio_feb import (
     preprocess_avater_audio_dataset,
     print_avater_audio_dataset_example
 )

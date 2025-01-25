@@ -24,7 +24,7 @@
 from typing import TYPE_CHECKING, Any, Dict, Optional, TypedDict
 
 import torch
-from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, AutoModelForVision2Seq, AutoProcessor, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq, AutoProcessor, AutoTokenizer
 from trl import AutoModelForCausalLMWithValueHead
 
 from ..extras import logging
@@ -167,7 +167,7 @@ def load_model(
                 load_class = AutoModelForCausalLM
 
             if model_args.train_from_scratch:
-                model = AutoModel.from_config(config, trust_remote_code=model_args.trust_remote_code)
+                model = load_class.from_config(config, trust_remote_code=model_args.trust_remote_code)
                 if hasattr(model, "load_llm_state_dict"):
                     model.load_llm_state_dict(config.llm_path)
             else:

@@ -52,6 +52,16 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+def _set_start_method():
+    try:
+        import multiprocess
+        if multiprocess.get_start_method() != 'spawn':
+            multiprocess.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass  # 如果已经设置过，就忽略错误
+
+_set_start_method()
+
 
 def _load_single_dataset(
     dataset_attr: "DatasetAttr",
@@ -186,7 +196,7 @@ def _get_preprocessed_dataset(
     kwargs = {}
     if not data_args.streaming:
         kwargs = dict(
-            num_proc=data_args.preprocessing_num_workers if stage != "avater_audio" else 1,
+            num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=(not data_args.overwrite_cache) or (training_args.local_process_index != 0),
             desc="Running tokenizer on dataset",
         )

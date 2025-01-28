@@ -159,6 +159,7 @@ def preprocess_avater_audio_dataset(
 
         input_ids = enocde_outputs["prefix_ids"] + enocde_outputs["text_input_ids"]
         labels = [IGNORE_INDEX] * len(enocde_outputs["prefix_ids"]) + enocde_outputs["text_labels"]
+        valid_tokens_pos = [pos+len(enocde_outputs["prefix_ids"]) for pos in enocde_outputs["valid_tokens_pos"]]
 
         if len(input_ids) < data_args.cutoff_len:
             pad_length = data_args.cutoff_len - len(input_ids)
@@ -171,7 +172,7 @@ def preprocess_avater_audio_dataset(
         model_inputs["input_ids"].append(input_ids)
         model_inputs["attention_mask"].append([1] * len(input_ids))
         model_inputs["labels"].append(labels)
-        model_inputs["valid_tokens_pos"].append(enocde_outputs["valid_tokens_pos"])
+        model_inputs["valid_tokens_pos"].append(valid_tokens_pos)
 
         # audio encoder
         # TODO

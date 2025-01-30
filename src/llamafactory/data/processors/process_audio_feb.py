@@ -106,15 +106,15 @@ def _encode_avater_audio_example(
                 for idx in range(len(target_dict["audio_codes"]))
             ]
             audio_codes_labels = copy.deepcopy(target_dict["audio_codes"])
-            for idx in range(len(audio_codes_labels)):
-                if idx == 0:
-                    audio_codes_labels[idx] = audio_codes_labels[0][:-tokenizer.acoustic_delay] + [IGNORE_INDEX] * tokenizer.acoustic_delay
-                else:
-                    audio_codes_labels[idx] = [IGNORE_INDEX] * (tokenizer.acoustic_delay+1) + audio_codes_labels[idx][tokenizer.acoustic_delay+1:]
-            t2a_attention_mask = tokenizer.convert_t2a_attention_mask(target_token_ids, target_dict["audio_codes"])
+            try:
+                t2a_attention_mask = tokenizer.convert_t2a_attention_mask(target_token_ids, target_dict["audio_codes"])
+            except Exception as e:
+                logger.warning_rank0(e)
+                return None
 
     assert len(text_input_ids) == len(text_labels), "The length of text_input_ids should equal with labels' length!"
     assert (len(audio_codes_ids) == len(audio_codes_labels) and len(audio_codes_ids[0]) == len(audio_codes_labels[0])), "The length of audio_codes_ids should equal with labels' length!"
+
     return {
         "prefix_ids": prefix_ids,
         "text_input_ids": text_input_ids, "text_labels": text_labels, "valid_tokens_pos": valid_tokens_pos,
@@ -156,6 +156,9 @@ def preprocess_avater_audio_dataset(
             train_on_prompt=data_args.train_on_prompt,
             mask_history=data_args.mask_history,
         )
+        
+        if enocde_outputs is None:
+            continue
 
         input_ids = enocde_outputs["prefix_ids"] + enocde_outputs["text_input_ids"]
         labels = [IGNORE_INDEX] * len(enocde_outputs["prefix_ids"]) + enocde_outputs["text_labels"]

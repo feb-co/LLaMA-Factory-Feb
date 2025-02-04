@@ -101,10 +101,7 @@ def _encode_avater_audio_example(
 
         # audio output
         if turn_idx == len(encoded_pairs) - 1 and "audio_codes" in target_dict:
-            audio_codes_ids = [
-                tokenizer.audio_code_shift(target_dict["audio_codes"][idx], layer_idx=idx)
-                for idx in range(len(target_dict["audio_codes"]))
-            ]
+            audio_codes_ids = target_dict["audio_codes"]
             audio_codes_labels = copy.deepcopy(target_dict["audio_codes"])
             try:
                 t2a_attention_mask = tokenizer.convert_t2a_attention_mask(target_token_ids, target_dict["audio_codes"])

@@ -167,7 +167,7 @@ def load_model(
                 load_class = AutoModelForCausalLM
 
             if model_args.train_from_scratch:
-                model = load_class.from_config(config, trust_remote_code=model_args.trust_remote_code)
+                model = load_class.from_config(config, torch_dtype=config.torch_dtype, trust_remote_code=model_args.trust_remote_code)
                 if hasattr(model, "load_llm_state_dict"):
                     model.load_llm_state_dict(config.llm_path)
             else:

@@ -21,7 +21,6 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -49,7 +48,10 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TemplateFeb:
     format_user: "Formatter"
-    format_user_audio: "Formatter"
+    format_user_prefix: "Formatter"
+    format_user_suffix: "Formatter"
+    format_user_audio_prefix: "Formatter"
+    format_user_audio_suffix: "Formatter"
     format_assistant: "Formatter"
     format_system: "Formatter"
     format_function: "Formatter"
@@ -117,7 +119,7 @@ class TemplateFeb:
         elements += self.format_prefix.apply()
         tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
         elements += self.format_system.apply(content=(system + tool_text))
-        system_message = self._convert_elements_to_ids(tokenizer, elements)
+        system_message = self._convert_txt_elements_to_ids(tokenizer, elements)
         return system_message
 
     def encode_instruction(
@@ -138,58 +140,62 @@ class TemplateFeb:
     def encode_avater_audio(
         self,
         tokenizer: "PreTrainedTokenizer",
-        prompt_messages: Sequence[Dict[str, str]],
-        response_message: Dict[str, str],
+        messages: Sequence[Dict[str, str]],
     ) -> List[Tuple[Dict, Dict]]:
         r"""
         Returns multiple pairs of token ids representing prompts and responses respectively.
         """
-        if prompt_messages[0]['role'] == Role.SYSTEM.value:
-            system = prompt_messages[0]['content']
-        else:
-            system = None
-
-        system = system or self.default_system
         prompt_pairs = []
-        for i, message in enumerate(prompt_messages):
-            elements = []
-
-            if i == 0:
-                if system:
-                    elements += self.format_prefix.apply()
-                    elements += self.format_system.apply(content=(system))
-
-            if i > 0 and i % 2 == 0:
-                elements += self.format_separator.apply()
-
+        for i, message in enumerate(messages):
             if message["role"] == Role.USER.value:
-                if message["content"] is not None:
-                    elements += self.format_user.apply(content=message["content"], idx=str(i // 2))
-                elif message["audios"] is not None:
-                    elements += self.format_user_audio.apply(content=json.dumps(message["audios"], ensure_ascii=False), idx=str(i // 2))
-                else:
-                    raise AssertionError
+                elements = self.format_user.apply(content=message["content"], idx=str(i // 2))
+                token_ids = self._convert_txt_elements_to_ids(tokenizer, elements)
+                token_elem = {"token_ids": token_ids}
+            elif message["role"] == Role.USER_AUDIO.value:
+                audio_features = []
+                audio_positions = []
+                token_ids = tokenizer.encode(
+                    self.format_user_prefix.apply(),
+                    add_special_tokens=False
+                )
+                for elem in message["content"]:
+                    if elem["type"] == "text":
+                        token_ids += tokenizer.encode(elem["text"], add_special_tokens=False)
+                    elif elem["type"] == "audio":
+                        token_ids += tokenizer.encode(
+                            self.format_user_audio_prefix.apply(),
+                            add_special_tokens=False
+                        )
+                        audio_length, audio_feature = tokenizer.encode_audio_feature(elem)
+                        audio_features.append(audio_feature)
+                        audio_positions.append([len(token_ids), audio_length])
+                        token_ids += [tokenizer.text_tokenizer.pad_token_id] * audio_length
+                        token_ids += tokenizer.encode(
+                            self.format_user_audio_suffix.apply(),
+                            add_special_tokens=False
+                        )
+                    else:
+                        raise NotImplementedError(f"Unexpected data type: {elem['type']} for role: {Role.USER_AUDIO.value}")
+                token_ids += tokenizer.encode(
+                    self.format_user_suffix.apply(),
+                    add_special_tokens=False
+                )
+                token_elem = {"token_ids": token_ids, "audio_features": audio_features, "audio_positions": audio_positions}
             elif message["role"] == Role.ASSISTANT.value:
-                elements += self.format_assistant.apply(content=message["content"])
+                elements = self.format_assistant.apply(content=message["content"])
+                token_ids = self._convert_txt_elements_to_ids(tokenizer, elements)
+                token_elem = {"token_ids": token_ids}
+            elif message["role"] == Role.ASSISTANT_AUDIO.value:
+                text_elements = self.format_assistant.apply(content=message["content"])
+                token_ids = self._convert_txt_elements_to_ids(tokenizer, text_elements)
+                response_encode = tokenizer.encode(text=None, audio_signal=message["audios"], add_special_tokens=False)
+                token_elem = {"token_ids": token_ids, "audio_codes": response_encode[1]}
             else:
                 raise NotImplementedError("Unexpected role: {}".format(message["role"]))
 
-            prompt_pairs.append(self._convert_elements_to_ids(tokenizer, elements, return_dict=True))
+            prompt_pairs.append(token_elem)
 
-        if response_message["role"] == Role.ASSISTANT.value:
-            audio_element = response_message["audios"]
-            text_elements = self.format_assistant.apply(content=response_message["content"])
-            token_ids = self._convert_elements_to_ids(tokenizer, text_elements)
-            response_encode = tokenizer.encode(text=None, audio_signal=audio_element, add_special_tokens=False)
-            if isinstance(response_encode, tuple):
-                response = {"token_ids": token_ids, "audio_codes": response_encode[1]}
-            else:
-                response = {"token_ids": response_encode}
-        else:
-            raise NotImplementedError("Unexpected role for repsonse: {}".format(response_message["role"]))
-
-        encoded_messages = prompt_pairs + [response]
-        return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
+        return [(prompt_pairs[i], prompt_pairs[i + 1]) for i in range(0, len(prompt_pairs), 2)]
 
     def _encode(
         self,
@@ -230,11 +236,11 @@ class TemplateFeb:
             else:
                 raise NotImplementedError("Unexpected role: {}".format(message["role"]))
 
-            encoded_messages.append(self._convert_elements_to_ids(tokenizer, elements))
+            encoded_messages.append(self._convert_txt_elements_to_ids(tokenizer, elements))
 
         return encoded_messages
 
-    def _convert_elements_to_ids(self, tokenizer: "PreTrainedTokenizer", elements: "SLOTS", return_dict=False) -> List[int]:
+    def _convert_txt_elements_to_ids(self, tokenizer: "PreTrainedTokenizer", elements: "SLOTS") -> List[int]:
         r"""
         Converts elements to token ids.
         """
@@ -242,19 +248,10 @@ class TemplateFeb:
         eos_token_id = tokenizer.eos_token_id if getattr(tokenizer, "eos_token_id", None) else tokenizer.text_tokenizer.eos_token_id
 
         token_ids = []
-        audio_features = []
-        audio_pos = []
-        for idx, elem in enumerate(elements):
+        for elem in elements:
             if isinstance(elem, str):
                 if len(elem) != 0:
-                    if idx>0 and isinstance(elements[idx-1], dict) and self.format_user_audio.slots[0].get("token") == elements[idx-1].get("token"):
-                        sub_token_ids, sub_audio_features, sub_audio_pos = tokenizer.encode_whisper_features(elem)
-                        for start_index, length in sub_audio_pos:
-                            audio_pos.append([len(token_ids)+start_index, length])
-                        token_ids += sub_token_ids
-                        audio_features += sub_audio_features
-                    else:
-                        token_ids += tokenizer.encode(elem, add_special_tokens=False)
+                    token_ids += tokenizer.encode(elem, add_special_tokens=False)
             elif isinstance(elem, dict):
                 token_ids += [tokenizer.convert_tokens_to_ids(elem.get("token"))]
             elif isinstance(elem, set):
@@ -265,16 +262,7 @@ class TemplateFeb:
             else:
                 raise ValueError(f"Input must be string, set[str] or dict[str, str], got {type(elem)}")
 
-        if return_dict:
-            if audio_features:
-                return {"token_ids": token_ids, "audio_features": audio_features, "audio_pos": audio_pos}
-            else:
-                return {"token_ids": token_ids}
-        else:
-            if audio_features:
-                return (token_ids, audio_features, audio_pos)
-            else:
-                return token_ids
+        return token_ids
 
 
 @dataclass
@@ -318,7 +306,7 @@ class Llama2Template(TemplateFeb):
             else:
                 raise NotImplementedError("Unexpected role: {}".format(message["role"]))
 
-            encoded_messages.append(self._convert_elements_to_ids(tokenizer, elements))
+            encoded_messages.append(self._convert_txt_elements_to_ids(tokenizer, elements))
 
         return encoded_messages
 
@@ -329,7 +317,10 @@ TEMPLATES: Dict[str, "TemplateFeb"] = {}
 def _register_template(
     name: str,
     format_user: Optional["Formatter"] = None,
-    format_user_audio: Optional["Formatter"] = None,
+    format_user_prefix: Optional["Formatter"] = None,
+    format_user_suffix: Optional["Formatter"] = None,
+    format_user_audio_prefix: Optional["Formatter"] = None,
+    format_user_audio_suffix: Optional["Formatter"] = None,
     format_assistant: Optional["Formatter"] = None,
     format_system: Optional["Formatter"] = None,
     format_function: Optional["Formatter"] = None,
@@ -375,6 +366,10 @@ def _register_template(
     template_class = Llama2Template if any(k in name for k in ("llama2", "mistral")) else TemplateFeb
     default_slots = ["{{content}}"] if efficient_eos else ["{{content}}", {"eos_token"}]
     default_user_formatter = StringFormatter(slots=["{{content}}"])
+    default_format_user_prefix = EmptyFormatter()
+    default_format_user_suffix = EmptyFormatter()
+    default_format_user_audio_prefix = EmptyFormatter()
+    default_format_user_audio_suffix = EmptyFormatter()
     default_assistant_formatter = StringFormatter(slots=default_slots)
     default_function_formatter = FunctionFormatter(slots=default_slots, tool_format="default")
     default_tool_formatter = ToolFormatter(tool_format="default")
@@ -382,7 +377,10 @@ def _register_template(
     default_prefix_formatter = EmptyFormatter()
     TEMPLATES[name] = template_class(
         format_user=format_user or default_user_formatter,
-        format_user_audio=format_user_audio or default_user_formatter,
+        format_user_prefix=format_user_prefix or default_format_user_prefix,
+        format_user_suffix=format_user_suffix or default_format_user_suffix,
+        format_user_audio_prefix=format_user_audio_prefix or default_format_user_audio_prefix,
+        format_user_audio_suffix=format_user_audio_suffix or default_format_user_audio_suffix,
         format_assistant=format_assistant or default_assistant_formatter,
         format_system=format_system or default_user_formatter,
         format_function=format_function or default_function_formatter,
@@ -900,14 +898,31 @@ _register_template(
             )
         ]
     ),
-    format_user_audio=StringFormatter(
+    format_user_prefix=EmptyFormatter(
         slots=[
             {
-                "token": "<|start_header_id|>user_audio<|end_header_id|>\n\n"
-            },
-            "{{content}}",
+                "token": "<|start_header_id|>user<|end_header_id|>\n\n"
+            }
+        ]
+    ),
+    format_user_suffix=EmptyFormatter(
+        slots=[
             {
                 "token": "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            }
+        ]
+    ),
+    format_user_audio_prefix=EmptyFormatter(
+        slots=[
+            {
+                "token": "<voice>"
+            }
+        ]
+    ),
+    format_user_audio_suffix=EmptyFormatter(
+        slots=[
+            {
+                "token": "</voice>"
             }
         ]
     ),

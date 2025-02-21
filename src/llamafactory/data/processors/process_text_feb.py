@@ -186,7 +186,6 @@ def preprocess_packed_conversation_dataset(
     for system_ids_key in lengths.keys():
         system_ids = list(system_ids_key)
         system_ids_len = len(system_ids)
-        sub_model_inputs = {"input_ids": [], "attention_mask": [], "labels": []}
         knapsacks = packing_conversation(
             lengths[system_ids_key],
             data_args.cutoff_len
@@ -221,13 +220,9 @@ def preprocess_packed_conversation_dataset(
                 == data_args.cutoff_len
             ), "The length of packed example should be identical to the cutoff length."
 
-            sub_model_inputs["input_ids"].append(packed_input_ids)
-            sub_model_inputs["attention_mask"].append(packed_attention_masks)
-            sub_model_inputs["labels"].append(packed_labels)
-
-        model_inputs["input_ids"] += sub_model_inputs["input_ids"]
-        model_inputs["attention_mask"] += sub_model_inputs["attention_mask"]
-        model_inputs["labels"] += sub_model_inputs["labels"]
+            model_inputs["input_ids"].append(packed_input_ids)
+            model_inputs["attention_mask"].append(packed_attention_masks)
+            model_inputs["labels"].append(packed_labels)
 
     return model_inputs
 

@@ -76,12 +76,13 @@ class DatasetAttr:
     role_tag: Optional[str] = "from"
     content_tag: Optional[str] = "value"
     user_tag: Optional[str] = "user"
+    user_audio_tag: Optional[str] = "user_audio"
     assistant_tag: Optional[str] = "assistant"
+    assistant_audio_tag: Optional[str] = "assistant_audio"
     observation_tag: Optional[str] = "observation"
     function_tag: Optional[str] = "function_call"
     system_tag: Optional[str] = "system"
     mask_tag: Optional[str] = "mask"
-    audio_tag: Optional[str] = "audios"
 
     # document columns
     prefix: Optional[str] = "prefix_text"

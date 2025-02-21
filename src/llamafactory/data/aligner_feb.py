@@ -277,14 +277,16 @@ def convert_avater_audio(
     """
     tag_mapping = {
         dataset_attr.user_tag: Role.USER.value,
-        dataset_attr.assistant_tag: Role.ASSISTANT.value,
+        dataset_attr.user_audio_tag: Role.USER_AUDIO.value,
+        dataset_attr.assistant_tag: Role.USER.value,
+        dataset_attr.assistant_audio_tag: Role.ASSISTANT_AUDIO.value,
         dataset_attr.observation_tag: Role.OBSERVATION.value,
         dataset_attr.function_tag: Role.FUNCTION.value,
         dataset_attr.system_tag: Role.SYSTEM.value,
         dataset_attr.mask_tag: Role.MASK.value,
     }
-    even_tags = (dataset_attr.user_tag, dataset_attr.observation_tag)
-    odd_tags = (dataset_attr.assistant_tag, dataset_attr.function_tag, dataset_attr.mask_tag)
+    even_tags = (dataset_attr.user_tag, dataset_attr.user_audio_tag, dataset_attr.observation_tag)
+    odd_tags = (dataset_attr.assistant_tag, dataset_attr.assistant_audio_tag, dataset_attr.function_tag, dataset_attr.mask_tag)
     accept_tags = (even_tags, odd_tags)
     messages = example[dataset_attr.messages]
     if (
@@ -304,22 +306,29 @@ def convert_avater_audio(
             print(f"Invalid role tag in {messages}.")
             broken_data = True
 
-        aligned_messages.append(
-            {
-                "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                "content": message[dataset_attr.content_tag],
-                "audios": [
-                    {
-                        "id": item["id"],
-                        "file": data_args.dataset_dir + "/" + item["file"],
-                        "split": item["split"],
-                    }
-                    if "file" in item else
-                    item
-                    for item in message[dataset_attr.audio_tag]
-                ]
-            }
-        )
+        if message[dataset_attr.role_tag] == dataset_attr.assistant_audio_tag:
+            aligned_messages.append(
+                {
+                    "role": tag_mapping[message[dataset_attr.role_tag].lower()],
+                    "content": message[dataset_attr.content_tag],
+                    "audios": [
+                        {
+                            "id": item["id"],
+                            "file": data_args.dataset_dir + "/" + item["file"],
+                            "split": item["split"],
+                        }
+                        if "file" in item else item
+                        for item in message["audios"]
+                    ]
+                }
+            )
+        else:
+            aligned_messages.append(
+                {
+                    "role": tag_mapping[message[dataset_attr.role_tag].lower()],
+                    "content": message[dataset_attr.content_tag],
+                }
+            )
 
         prompt = aligned_messages[:-1]
         response = aligned_messages[-1:]

@@ -27,7 +27,7 @@ import sys
 from typing import TYPE_CHECKING, Dict, Literal, Optional, Sequence, Union
 
 import numpy as np
-from datasets import DatasetDict, load_dataset, load_from_disk
+from datasets import DatasetDict, load_dataset, load_from_disk, VerificationMode
 from transformers.utils.versions import require_version
 
 from ..extras import logging

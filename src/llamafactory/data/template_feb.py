@@ -158,22 +158,26 @@ class TemplateFeb:
                     self.format_user_prefix.apply(),
                     add_special_tokens=False
                 )
-                for elem in message["content"]:
+                for elem_idx, elem in enumerate(message["content"]):
                     if elem["type"] == "text":
                         token_ids += tokenizer.encode(elem["text"], add_special_tokens=False)
                     elif elem["type"] == "audio":
-                        token_ids += tokenizer.encode(
-                            self.format_user_audio_prefix.apply(),
-                            add_special_tokens=False
-                        )
+                        if elem_idx==0 or message["content"][elem_idx]["type"] != "audio":
+                            token_ids += tokenizer.encode(
+                                self.format_user_audio_prefix.apply(),
+                                add_special_tokens=False
+                            )
+
                         audio_length, audio_feature = tokenizer.encode_audio_feature(elem)
                         audio_features.append(audio_feature)
                         audio_positions.append([len(token_ids), audio_length])
                         token_ids += [tokenizer.text_tokenizer.pad_token_id] * audio_length
-                        token_ids += tokenizer.encode(
-                            self.format_user_audio_suffix.apply(),
-                            add_special_tokens=False
-                        )
+
+                        if elem_idx==0 or message["content"][elem_idx]["type"] != "audio":
+                            token_ids += tokenizer.encode(
+                                self.format_user_audio_suffix.apply(),
+                                add_special_tokens=False
+                            )
                     else:
                         raise NotImplementedError(f"Unexpected data type: {elem['type']} for role: {Role.USER_AUDIO.value}")
                 token_ids += tokenizer.encode(

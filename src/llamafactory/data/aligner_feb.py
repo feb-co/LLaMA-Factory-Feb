@@ -311,15 +311,7 @@ def convert_avater_audio(
                 {
                     "role": tag_mapping[message[dataset_attr.role_tag].lower()],
                     "content": message[dataset_attr.content_tag],
-                    "audios": [
-                        {
-                            "id": item["id"],
-                            "file": data_args.dataset_dir + "/" + item["file"],
-                            "split": item["split"],
-                        }
-                        if "file" in item else item
-                        for item in message["audios"]
-                    ]
+                    "audios": message["audios"]
                 }
             )
         else:

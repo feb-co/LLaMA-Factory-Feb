@@ -919,14 +919,14 @@ _register_template(
     format_user_audio_prefix=EmptyFormatter(
         slots=[
             {
-                "token": "<voice>"
+                "token": "<audio>"
             }
         ]
     ),
     format_user_audio_suffix=EmptyFormatter(
         slots=[
             {
-                "token": "</voice>"
+                "token": "</audio>"
             }
         ]
     ),

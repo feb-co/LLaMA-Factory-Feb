@@ -23,6 +23,7 @@
 
 
 import os
+import json
 from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
@@ -306,7 +307,14 @@ def convert_avater_audio(
             print(f"Invalid role tag in {messages}.")
             broken_data = True
 
-        if message[dataset_attr.role_tag] == dataset_attr.assistant_audio_tag:
+        if message[dataset_attr.role_tag] == dataset_attr.user_audio_tag:
+            aligned_messages.append(
+                {
+                    "role": tag_mapping[message[dataset_attr.role_tag].lower()],
+                    "content": json.loads(message[dataset_attr.content_tag]),
+                }
+            )
+        elif message[dataset_attr.role_tag] == dataset_attr.assistant_audio_tag:
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[dataset_attr.role_tag].lower()],

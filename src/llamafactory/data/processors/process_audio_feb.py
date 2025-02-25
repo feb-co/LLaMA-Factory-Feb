@@ -23,6 +23,7 @@
 
 
 import copy
+import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
@@ -64,7 +65,7 @@ def _encode_avater_audio_example(
 
     messages = prompt + response
 
-    text_input_ids, text_labels,  = [], []
+    text_input_ids, text_labels  = [], []
     audio_features, audio_positions = [], []
     valid_tokens_pos, audio_codes_ids, audio_codes_labels = [], [], []
     t2a_attention_mask = []
@@ -113,7 +114,7 @@ def _encode_avater_audio_example(
         audio_start_pos += len(text_input_ids)
 
     assert len(text_input_ids) == len(text_labels), "The length of text_input_ids should equal with labels' length!"
-    assert (len(audio_codes_ids) == len(audio_codes_labels) and len(audio_codes_ids[0]) == len(audio_codes_labels[0])), "The length of audio_codes_ids should equal with labels' length!"
+    assert len(audio_codes_ids) == len(audio_codes_labels), "The length of audio_codes_ids should equal with labels' length!"
     return {
         "prefix_ids": prefix_ids,
         "text_input_ids": text_input_ids, "text_labels": text_labels,

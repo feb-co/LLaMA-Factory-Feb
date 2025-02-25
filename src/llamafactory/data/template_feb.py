@@ -155,7 +155,7 @@ class TemplateFeb:
                 audio_features = []
                 audio_positions = []
                 token_ids = tokenizer.encode(
-                    self.format_user_prefix.apply(),
+                    "".join(self.format_user_prefix.apply()),
                     add_special_tokens=False
                 )
                 for elem_idx, elem in enumerate(message["content"]):
@@ -164,7 +164,7 @@ class TemplateFeb:
                     elif elem["type"] == "audio":
                         if elem_idx==0 or message["content"][elem_idx]["type"] != "audio":
                             token_ids += tokenizer.encode(
-                                self.format_user_audio_prefix.apply(),
+                                "".join(self.format_user_audio_prefix.apply()),
                                 add_special_tokens=False
                             )
 
@@ -175,13 +175,13 @@ class TemplateFeb:
 
                         if elem_idx==0 or message["content"][elem_idx]["type"] != "audio":
                             token_ids += tokenizer.encode(
-                                self.format_user_audio_suffix.apply(),
+                                "".join(self.format_user_audio_suffix.apply()),
                                 add_special_tokens=False
                             )
                     else:
                         raise NotImplementedError(f"Unexpected data type: {elem['type']} for role: {Role.USER_AUDIO.value}")
                 token_ids += tokenizer.encode(
-                    self.format_user_suffix.apply(),
+                    "".join(self.format_user_suffix.apply()),
                     add_special_tokens=False
                 )
                 token_elem = {"token_ids": token_ids, "audio_features": audio_features, "audio_positions": audio_positions}
@@ -904,30 +904,22 @@ _register_template(
     ),
     format_user_prefix=EmptyFormatter(
         slots=[
-            {
-                "token": "<|start_header_id|>user<|end_header_id|>\n\n"
-            }
+            "<|start_header_id|>user<|end_header_id|>\n\n"
         ]
     ),
     format_user_suffix=EmptyFormatter(
         slots=[
-            {
-                "token": "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-            }
+            "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
         ]
     ),
     format_user_audio_prefix=EmptyFormatter(
         slots=[
-            {
-                "token": "<audio>"
-            }
+            "<audio>"
         ]
     ),
     format_user_audio_suffix=EmptyFormatter(
         slots=[
-            {
-                "token": "</audio>"
-            }
+            "</audio>"
         ]
     ),
     format_system=StringFormatter(slots=["<|start_header_id|>system<|end_header_id|>\n\n{{content}}<|eot_id|>"]),

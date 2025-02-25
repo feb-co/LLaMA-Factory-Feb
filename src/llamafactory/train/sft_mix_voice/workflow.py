@@ -101,7 +101,8 @@ def run_sft_mix_voice(
     # Keyword arguments for `model.generate`
     gen_kwargs = generating_args.to_dict()
     gen_kwargs["eos_token_id"] = [tokenizer.text_tokenizer.eos_token_id]
-    gen_kwargs["eoa_token_id"] = [tokenizer.audio_special_token["eoa_token"]]
+    if hasattr(tokenizer, "audio_special_token"):
+        gen_kwargs["eoa_token_id"] = [tokenizer.audio_special_token["eoa_token"]]
     gen_kwargs["logits_processor"] = get_logits_processor()
 
     # Training

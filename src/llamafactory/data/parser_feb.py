@@ -40,10 +40,10 @@ class DatasetAttr:
     """
 
     # basic configs
-    load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file"]
+    load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file", "arrow"]
     dataset_name: str
     stage: Literal["pretrain", "conversation", "instruction", "avater_audio"] = "conversation"
-    formatting: Literal["alpaca", "sharegpt", "document", "audio"] = "sharegpt"
+    formatting: Literal["alpaca", "sharegpt", "document", "audio", "audio_arrow_asr", "audio_arrow_tts"] = "sharegpt"
     ranking: bool = False
 
     # extra configs
@@ -149,6 +149,8 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
                 dataset_attr = DatasetAttr("hf_hub", dataset_name=dataset_info[name]["hf_hub_url"])
         elif "script_url" in dataset_info[name]:
             dataset_attr = DatasetAttr("script", dataset_name=dataset_info[name]["script_url"])
+        elif "arrow_directory" in dataset_info[name]:
+            dataset_attr = DatasetAttr("arrow", dataset_name=dataset_info[name]["arrow_directory"])
         else:
             dataset_attr = DatasetAttr("file", dataset_name=dataset_info[name]["file_name"])
 

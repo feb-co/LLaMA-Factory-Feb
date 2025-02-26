@@ -52,6 +52,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+
 def _set_start_method():
     try:
         import multiprocess
@@ -59,6 +60,7 @@ def _set_start_method():
             multiprocess.set_start_method('spawn', force=True)
     except RuntimeError:
         pass  # 如果已经设置过，就忽略错误
+
 
 _set_start_method()
 
@@ -101,6 +103,8 @@ def _load_single_dataset(
 
         if any(data_path != FILEEXT2TYPE.get(os.path.splitext(data_file)[-1][1:], None) for data_file in data_files):
             raise ValueError("File types should be identical.")
+    elif dataset_attr.load_from == "arrow":
+        data_path = os.path.join(dataset_attr.dataset_name, dataset_attr.split)
     else:
         raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
@@ -138,6 +142,10 @@ def _load_single_dataset(
             cache_dir=cache_dir,
             token=model_args.om_hub_token,
             streaming=data_args.streaming,
+        )
+    elif dataset_attr.load_from == "arrow":
+        dataset = load_from_disk(
+            dataset_path=data_path
         )
     else:
         dataset = load_dataset(

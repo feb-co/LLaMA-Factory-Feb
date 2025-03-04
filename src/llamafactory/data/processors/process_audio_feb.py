@@ -63,6 +63,9 @@ def _encode_avater_audio_example(
     ):  # llava-like models
         prompt[0]["content"] = template.image_token + prompt[0]["content"]
 
+    if prompt is None or response is None or len(prompt)==0 or len(response)==0:
+        return None
+
     messages = prompt + response
 
     text_input_ids, text_labels  = [], []
@@ -71,7 +74,12 @@ def _encode_avater_audio_example(
     t2a_attention_mask = []
 
     prefix_ids = template.encode_system(tokenizer=tokenizer, system=system, tools=tools)
-    encoded_pairs = template.encode_avater_audio(tokenizer=tokenizer, messages=messages)
+    try:
+        encoded_pairs = template.encode_avater_audio(tokenizer=tokenizer, messages=messages)
+    except Exception as e:
+        logger.warning_rank0(e)
+        return None
+
     text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
     audio_start_pos = 0
     for turn_idx, (source_dict, target_dict) in enumerate(encoded_pairs):
@@ -137,7 +145,7 @@ def _prepare_model_inputs(cutoff_len: int, pad_token_id: int, enocde_outputs: di
         input_ids = input_ids[:cutoff_len]
         text_labels = text_labels[:cutoff_len]
     elif len(input_ids) > cutoff_len:
-        return None
+        return model_inputs
 
     # text encoder
     model_inputs["input_ids"].append(input_ids)

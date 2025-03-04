@@ -162,7 +162,7 @@ class TemplateFeb:
                     if elem["type"] == "text":
                         token_ids += tokenizer.encode(elem["text"], add_special_tokens=False)
                     elif elem["type"] == "audio":
-                        if elem_idx==0 or message["content"][elem_idx]["type"] != "audio":
+                        if elem_idx==0 or message["content"][elem_idx-1]["type"] != "audio":
                             token_ids += tokenizer.encode(
                                 "".join(self.format_user_audio_prefix.apply()),
                                 add_special_tokens=False
@@ -173,7 +173,7 @@ class TemplateFeb:
                         audio_positions.append([len(token_ids), audio_length])
                         token_ids += [tokenizer.text_tokenizer.pad_token_id] * audio_length
 
-                        if elem_idx==0 or message["content"][elem_idx]["type"] != "audio":
+                        if elem_idx==len(message["content"])-1 or message["content"][elem_idx+1]["type"] != "audio":
                             token_ids += tokenizer.encode(
                                 "".join(self.format_user_audio_suffix.apply()),
                                 add_special_tokens=False

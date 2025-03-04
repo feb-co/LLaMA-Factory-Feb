@@ -24,10 +24,11 @@
 
 import os
 import sys
+import glob
 from typing import TYPE_CHECKING, Dict, Literal, Optional, Sequence, Union
 
 import numpy as np
-from datasets import DatasetDict, load_dataset, load_from_disk, VerificationMode
+from datasets import DatasetDict, load_dataset, load_from_disk, set_caching_enabled
 from transformers.utils.versions import require_version
 
 from ..extras import logging
@@ -104,7 +105,18 @@ def _load_single_dataset(
         if any(data_path != FILEEXT2TYPE.get(os.path.splitext(data_file)[-1][1:], None) for data_file in data_files):
             raise ValueError("File types should be identical.")
     elif dataset_attr.load_from == "arrow":
-        data_path = os.path.join(dataset_attr.dataset_name, dataset_attr.split)
+        data_files = []
+        local_path = os.path.join(dataset_attr.dataset_name, dataset_attr.split)
+        if os.path.isdir(local_path):  # is directory
+            data_files += list(glob.glob(os.path.join(local_path, "*.arrow")))
+        elif os.path.isfile(local_path):  # is file
+            data_files.append(local_path)
+        else:
+            raise ValueError(f"File {local_path} not found.")
+
+        data_path = FILEEXT2TYPE.get(os.path.splitext(data_files[0])[-1][1:], None)
+        if data_path is None:
+            raise ValueError("Allowed file types: {}.".format(",".join(FILEEXT2TYPE.keys())))
     else:
         raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
@@ -142,10 +154,6 @@ def _load_single_dataset(
             cache_dir=cache_dir,
             token=model_args.om_hub_token,
             streaming=data_args.streaming,
-        )
-    elif dataset_attr.load_from == "arrow":
-        dataset = load_from_disk(
-            dataset_path=data_path
         )
     else:
         dataset = load_dataset(
@@ -186,6 +194,7 @@ def _get_preprocessed_dataset(
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
     stage: Literal["pretrain", "conversation", "instruction"],
+    formatting: Literal["alpaca", "sharegpt", "document", "audio", "audio_arrow_asr", "audio_arrow_tts"],
     template: "Template",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
@@ -242,26 +251,51 @@ def get_dataset(
     """
     # Load tokenized dataset
     if data_args.tokenized_path is not None:
-        if has_tokenized_data(data_args.tokenized_path):
-            logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
-            tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(data_args.tokenized_path)
-            logger.info_rank0(f"Loaded tokenized dataset from {data_args.tokenized_path}.")
+        if isinstance(data_args.tokenized_path, str):
+            if has_tokenized_data(data_args.tokenized_path):
+                logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
+                tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(data_args.tokenized_path)
+                logger.info_rank0(f"Loaded tokenized dataset from {data_args.tokenized_path}.")
 
+                dataset_module: Dict[str, "Dataset"] = {}
+                if isinstance(tokenized_data, DatasetDict):
+                    if "train" in tokenized_data:
+                        dataset_module["train_dataset"] = tokenized_data["train"]
+
+                    if "validation" in tokenized_data:
+                        dataset_module["eval_dataset"] = tokenized_data["validation"]
+
+                else:  # Dataset
+                    dataset_module["train_dataset"] = tokenized_data
+
+                if data_args.streaming:
+                    dataset_module = {k: v.to_iterable_dataset() for k, v in dataset_module.items()}
+
+                return dataset_module
+        elif isinstance(data_args.tokenized_path, list):
+            train_dataset_list = []
+            for tokenizer_dir in data_args.tokenized_path:
+                if has_tokenized_data(tokenizer_dir):
+                    logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
+                    tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(tokenizer_dir)
+                    logger.info_rank0(f"Loaded tokenized dataset from {tokenizer_dir}.")
+
+                    if isinstance(tokenized_data, DatasetDict):
+                        train_dataset_list.append(tokenized_data["train"])
+                    else:
+                        train_dataset_list.append(tokenized_data)
+                else:
+                    raise ValueError(f"{tokenizer_dir} not exist, list tokenized_path only support for exist dataset path.")
+
+            train_dataset = merge_dataset(train_dataset_list, data_args, seed=training_args.seed)
+            train_dataset = train_dataset.shuffle(seed=training_args.seed)
             dataset_module: Dict[str, "Dataset"] = {}
-            if isinstance(tokenized_data, DatasetDict):
-                if "train" in tokenized_data:
-                    dataset_module["train_dataset"] = tokenized_data["train"]
-
-                if "validation" in tokenized_data:
-                    dataset_module["eval_dataset"] = tokenized_data["validation"]
-
-            else:  # Dataset
-                dataset_module["train_dataset"] = tokenized_data
-
+            dataset_module["train_dataset"] = train_dataset
             if data_args.streaming:
                 dataset_module = {k: v.to_iterable_dataset() for k, v in dataset_module.items()}
-
             return dataset_module
+        else:
+            raise ValueError("not support other type tokenized_path.")
 
         if data_args.streaming:
             raise ValueError("Turn off `streaming` when saving dataset to disk.")
@@ -290,6 +324,7 @@ def get_dataset(
                 data_args,
                 training_args,
                 dataset_attr.stage,
+                dataset_attr.formatting,
                 template,
                 tokenizer,
                 processor,
@@ -305,9 +340,7 @@ def get_dataset(
     else:
         dataset_dict = {}
         if dataset is not None:
-            if data_args.streaming:
-                dataset = dataset.shuffle(buffer_size=data_args.buffer_size, seed=training_args.seed)
-
+            dataset = dataset.shuffle(seed=training_args.seed)
             dataset_dict["train"] = dataset
 
         dataset_dict = DatasetDict(dataset_dict)

@@ -24,6 +24,7 @@
 
 from functools import partial
 from typing import TYPE_CHECKING, Union
+from datasets import set_caching_enabled
 
 from .aligner_text import convert_alpaca, convert_document, convert_sharegpt
 from .aligner_audio import convert_avater_audio, convert_avater_audio_arrow
@@ -56,6 +57,9 @@ def align_dataset(
         _images: [],
         _videos: [],
     """
+    column_names = list(next(iter(dataset)).keys())
+    kwargs = {}
+
     if dataset_attr.formatting == "alpaca":
         convert_func = partial(convert_alpaca, dataset_attr=dataset_attr, data_args=data_args)
     elif dataset_attr.formatting == "document":
@@ -67,8 +71,6 @@ def align_dataset(
     else:
         convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, data_args=data_args)
 
-    column_names = list(next(iter(dataset)).keys())
-    kwargs = {}
     if not data_args.streaming:
         kwargs = dict(
             num_proc=data_args.preprocessing_num_workers,

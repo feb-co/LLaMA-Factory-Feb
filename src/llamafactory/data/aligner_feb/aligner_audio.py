@@ -28,7 +28,11 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from ...extras import logging
 from ..data_utils import Role
-from .utils import process_audio_bytes
+from .utils import (
+    process_audio_bytes,
+    split_user_audio,
+    resample_audio_array
+)
 
 
 if TYPE_CHECKING:
@@ -79,27 +83,40 @@ def convert_avater_audio(
             broken_data = True
 
         if message[dataset_attr.role_tag] == dataset_attr.user_audio_tag:
-            aligned_messages.append(
-                {
-                    "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                    "content": [
-                        item
-                        if item["type"] != "audio" else
-                        {"type": "audio", "array": sf.read(item["file"])[0]}
-                        for item in json.loads(message[dataset_attr.content_tag])
-                    ],
-                }
-            )
+            aligned_message = {
+                "role": tag_mapping[message[dataset_attr.role_tag].lower()],
+                "content": []
+            }
+            for item in json.loads(message[dataset_attr.content_tag]):
+                if item["type"] != "audio":
+                    aligned_message["content"].append(item)
+                else:
+                    audio_array, sample_rate = sf.read(item["file"])
+                    aligned_message["content"] += split_user_audio(
+                        audio_array,
+                        sample_rate,
+                        target_sr=16000,
+                        duration=30
+                    )
+            aligned_messages.append(aligned_message)
         elif message[dataset_attr.role_tag] == dataset_attr.assistant_audio_tag:
+            audios = []
+            for item in message["audios"]:
+                array, sample_rate = sf.read(item["file"])
+                audios.append({
+                    "id": item["id"],
+                    "array": resample_audio_array(
+                        array,
+                        sample_rate,
+                        target_sr=24000
+                    ),
+                    "split": item["split"]
+                })
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[dataset_attr.role_tag].lower()],
                     "content": message[dataset_attr.content_tag],
-                    "audios": [{
-                        "id": item["id"],
-                        "array": sf.read(item["file"])[0],
-                        "split": item["split"]
-                    } for item in message["audios"]]
+                    "audios": audios
                 }
             )
         else:
@@ -144,38 +161,50 @@ def convert_LargeScaleASR(
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
 ) -> Dict[str, Any]:
-    example_id = example["ID"]
-    audio_text = example["text"].lower()
-    audio_array, samples_rate = process_audio_bytes(example["wav"]["bytes"])
     system = dataset_attr.system if dataset_attr.system else ""
 
-    if dataset_attr.formatting == "audio_arrow_asr":
-        prompt = [{
-            "role": Role.USER_AUDIO.value,
-            "content": [
-                {"type": "audio", "array": audio_array}
-            ],
-        }]
-        response = [{
-            "role": Role.ASSISTANT.value,
-            "content": audio_text,
-        }]
-    elif dataset_attr.formatting == "audio_arrow_tts":
-        prompt = [{
-            "role": Role.USER.value,
-            "content": audio_text,
-        }]
-        response = [{
-            "role": Role.ASSISTANT_AUDIO.value,
-            "content": audio_text,
-            "audios": [{
-                "id": example_id,
-                "array": audio_array,
-                "split": ""
+    try:
+        example_id = example["ID"]
+        audio_text = example["text"].lower()
+        audio_array, samples_rate = process_audio_bytes(example["wav"]["bytes"])
+        if dataset_attr.formatting == "audio_arrow_asr":
+            prompt = [{
+                "role": Role.USER_AUDIO.value,
+                "content": split_user_audio(
+                    audio_array,
+                    samples_rate,
+                    target_sr=16000,
+                    duration=30
+                ),
             }]
-        }]
-    else:
-        NotImplementedError
+            response = [{
+                "role": Role.ASSISTANT.value,
+                "content": audio_text,
+            }]
+        elif dataset_attr.formatting == "audio_arrow_tts":
+            prompt = [{
+                "role": Role.USER.value,
+                "content": audio_text,
+            }]
+            response = [{
+                "role": Role.ASSISTANT_AUDIO.value,
+                "content": audio_text,
+                "audios": [{
+                    "id": example_id,
+                    "array": resample_audio_array(
+                        audio_array,
+                        orig_sr=samples_rate,
+                        target_sr=24000
+                    ),
+                    "split": ""
+                }]
+            }]
+        else:
+            raise NotImplementedError
+    except Exception as e:
+        logger.warning_rank0(e)
+        prompt = []
+        response = []
 
     output = {
         "_prompt": prompt,

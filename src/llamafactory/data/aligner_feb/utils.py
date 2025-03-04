@@ -1,22 +1,42 @@
 
 import io
-import wave
-import numpy as np
+import librosa
 
 
-def process_audio_bytes(byte_io):
-    byte_io = io.BytesIO(byte_io)
-    with wave.open(byte_io, 'rb') as wav_file:
-        n_channels = wav_file.getnchannels()
-        sampwidth = wav_file.getsampwidth()
-        framerate = wav_file.getframerate()
-        n_frames = wav_file.getnframes()
-        
-        audio_frames = wav_file.readframes(n_frames)
+def process_audio_bytes(byte_data):
+    if isinstance(byte_data, bytes):
+        byte_io = io.BytesIO(byte_data)
+    elif isinstance(byte_data, io.BytesIO):
+        byte_io = byte_data
+    else:
+        raise TypeError("Expected bytes or BytesIO object")
+
+    audio_array, sr = librosa.load(byte_io, sr=None)
+
+    return audio_array, sr
+
+
+def resample_audio_array(array, orig_sr, target_sr):
+    if orig_sr == target_sr:
+        return array
     
-    audio_array = np.frombuffer(audio_frames, dtype=np.int16)
-    
-    if n_channels > 1:
-        audio_array = audio_array.reshape(-1, n_channels)
-    
-    return audio_array, framerate
+    array_resampled = librosa.resample(array, orig_sr=orig_sr, target_sr=target_sr)
+    return array_resampled
+
+
+def split_user_audio(audio_array, sample_rate, target_sr, duration: int):
+    audio_array = resample_audio_array(audio_array, sample_rate, target_sr)
+
+    contents = []
+    hop = int(target_sr*duration)
+    step = 0
+    for offset in range(0, len(audio_array), hop):
+        offset_l = max(offset - step, 0)
+        offset_r = min(offset + hop + step, len(audio_array))
+        contents.append(
+            {
+                "type": "audio",
+                "array": audio_array[offset_l:offset_r]
+            }
+        )
+    return contents

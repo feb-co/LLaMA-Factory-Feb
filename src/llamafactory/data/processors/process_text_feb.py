@@ -46,6 +46,82 @@ logger = logging.get_logger(__name__)
 # """
 # conversation
 # """
+def _encode_normal_message(
+    messages: Optional[list],
+    template: "TemplateFeb",
+    tokenizer: "PreTrainedTokenizer",
+    train_on_prompt: bool,
+    mask_history: bool,
+    input_ids: Optional[list],
+    labels: Optional[list],
+):
+    encoded_pairs = template.encode_multiturn(tokenizer=tokenizer, messages=messages, system=None, tools=None)
+    text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
+    for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
+        source_len = len(source_ids)
+        target_len = len(target_ids)
+
+        if train_on_prompt:
+            source_label = source_ids
+        elif turn_idx != 0 and template.efficient_eos:
+            source_label = [tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
+        else:
+            source_label = [IGNORE_INDEX] * source_len
+
+        if mask_history and turn_idx != len(encoded_pairs) - 1:
+            target_label = [IGNORE_INDEX] * target_len
+        elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
+            target_label = [IGNORE_INDEX] * target_len
+        else:
+            target_label = target_ids
+
+        input_ids += source_ids + target_ids
+        labels += source_label + target_label
+
+    return input_ids, labels
+
+
+def _encode_longthought_message(
+    messages: Optional[list],
+    template: "TemplateFeb",
+    tokenizer: "PreTrainedTokenizer",
+    train_on_prompt: bool,
+    mask_history: bool,
+    input_ids: Optional[list],
+    labels: Optional[list],
+):
+    encoded_pairs = template.encode_multiturn_with_longthought(tokenizer=tokenizer, messages=messages, system=None, tools=None)
+    text_pairs = [(messages[i], messages[i + 1], messages[i + 2]) for i in range(0, len(messages), 3)]
+    for turn_idx, (source_ids, thought_ids, target_ids) in enumerate(encoded_pairs):
+        source_len = len(source_ids)
+        thought_len = len(thought_ids)
+        target_len = len(target_ids)
+
+        if train_on_prompt:
+            source_label = source_ids
+        elif turn_idx != 0 and template.efficient_eos:
+            source_label = [tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
+        else:
+            source_label = [IGNORE_INDEX] * source_len
+
+        if mask_history and turn_idx != len(encoded_pairs) - 1:
+            thought_label = [IGNORE_INDEX] * thought_len
+        else:
+            thought_label = thought_ids
+
+        if mask_history and turn_idx != len(encoded_pairs) - 1:
+            target_label = [IGNORE_INDEX] * target_len
+        elif text_pairs[turn_idx][2]["role"] == Role.MASK.value:
+            target_label = [IGNORE_INDEX] * target_len
+        else:
+            target_label = target_ids
+
+        input_ids += source_ids + thought_ids + target_ids
+        labels += source_label + thought_label + target_label
+
+    return input_ids, labels
+
+
 def _encode_conversation_example(
     prompt: Sequence[Dict[str, str]],
     response: Sequence[Dict[str, str]],
@@ -73,32 +149,10 @@ def _encode_conversation_example(
         labels += [IGNORE_INDEX] * getattr(processor, "image_seq_length")
 
     prefix_ids = template.encode_system(tokenizer=tokenizer, system=system, tools=tools)
-    encoded_pairs = template.encode_multiturn(tokenizer=tokenizer, messages=messages, system=None, tools=None)
-    text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
-    for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
-        source_len = len(source_ids)
-        target_len = len(target_ids)
-
-        if train_on_prompt:
-            source_label = source_ids
-        elif turn_idx != 0 and template.efficient_eos:
-            source_label = [tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
-        else:
-            source_label = [IGNORE_INDEX] * source_len
-
-        if mask_history and turn_idx != len(encoded_pairs) - 1:
-            target_label = [IGNORE_INDEX] * target_len
-        elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
-            target_label = [IGNORE_INDEX] * target_len
-        else:
-            target_label = target_ids
-
-        input_ids += source_ids + target_ids
-        labels += source_label + target_label
-
-    if template.efficient_eos:
-        input_ids += [tokenizer.eos_token_id]
-        labels += [tokenizer.eos_token_id]
+    if len(messages)%2 == 0:
+        input_ids, labels = _encode_normal_message(messages, template, tokenizer, train_on_prompt, mask_history, input_ids, labels)
+    elif len(messages)%3 == 0:
+        input_ids, labels = _encode_longthought_message(messages, template, tokenizer, train_on_prompt, mask_history, input_ids, labels)
 
     assert len(input_ids) == len(labels), "The length of input_ids should equal with labels' length!"
     return prefix_ids, input_ids, labels

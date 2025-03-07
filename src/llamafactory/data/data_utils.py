@@ -35,6 +35,7 @@ SLOTS = Sequence[Union[str, Set[str], Dict[str, str]]]
 @unique
 class Role(str, Enum):
     USER = "user"
+    THINK = "think"
     USER_AUDIO = "user_audio"
     ASSISTANT = "assistant"
     ASSISTANT_AUDIO = "assistant_audio"

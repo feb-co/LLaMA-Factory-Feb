@@ -43,7 +43,7 @@ class DatasetAttr:
     load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file", "arrow"]
     dataset_name: str
     stage: Literal["pretrain", "conversation", "instruction", "avater_audio"] = "conversation"
-    formatting: Literal["alpaca", "sharegpt", "document", "audio", "audio_arrow_asr", "audio_arrow_tts"] = "sharegpt"
+    formatting: Literal["alpaca", "sharegpt", "document", "longthought", "audio", "audio_arrow_asr", "audio_arrow_tts"] = "sharegpt"
     ranking: bool = False
 
     # extra configs
@@ -76,6 +76,7 @@ class DatasetAttr:
     role_tag: Optional[str] = "from"
     content_tag: Optional[str] = "value"
     user_tag: Optional[str] = "user"
+    think_tag: Optional[str] = "think"
     user_audio_tag: Optional[str] = "user_audio"
     assistant_tag: Optional[str] = "assistant"
     assistant_audio_tag: Optional[str] = "assistant_audio"

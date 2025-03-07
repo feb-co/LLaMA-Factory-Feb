@@ -26,7 +26,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Union
 from datasets import set_caching_enabled
 
-from .aligner_text import convert_alpaca, convert_document, convert_sharegpt
+from .aligner_text import convert_alpaca, convert_document, convert_sharegpt, convert_longthought
 from .aligner_audio import convert_avater_audio, convert_avater_audio_arrow
 from ...extras import logging
 
@@ -66,6 +66,8 @@ def align_dataset(
         convert_func = partial(convert_document, dataset_attr=dataset_attr, data_args=data_args)
     elif dataset_attr.formatting == "audio":
         convert_func = partial(convert_avater_audio, dataset_attr=dataset_attr, data_args=data_args)
+    elif dataset_attr.formatting == "longthought":
+        convert_func = partial(convert_longthought, dataset_attr=dataset_attr, data_args=data_args)
     elif "audio_arrow" in dataset_attr.formatting:
         convert_func = partial(convert_avater_audio_arrow, dataset_attr=dataset_attr, data_args=data_args)
     else:

@@ -52,6 +52,7 @@ class TemplateFeb:
     format_user_suffix: "Formatter"
     format_user_audio_prefix: "Formatter"
     format_user_audio_suffix: "Formatter"
+    format_thought: "Formatter"
     format_assistant: "Formatter"
     format_system: "Formatter"
     format_function: "Formatter"
@@ -96,6 +97,19 @@ class TemplateFeb:
         """
         encoded_messages = self._encode(tokenizer, messages, system, tools)
         return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
+
+    def encode_multiturn_with_longthought(
+        self,
+        tokenizer: "PreTrainedTokenizer",
+        messages: Sequence[Dict[str, str]],
+        system: Optional[str] = None,
+        tools: Optional[str] = None,
+    ) -> List[Tuple[List[int], List[int]]]:
+        r"""
+        Returns multiple pairs of token ids representing prompts and responses respectively.
+        """
+        encoded_messages = self._encode(tokenizer, messages, system, tools)
+        return [(encoded_messages[i], encoded_messages[i + 1], encoded_messages[i + 2]) for i in range(0, len(encoded_messages), 3)]
 
     def extract_tool(self, content: str) -> Union[str, List["FunctionCall"]]:
         r"""
@@ -229,6 +243,8 @@ class TemplateFeb:
 
             if message["role"] == Role.USER.value:
                 elements += self.format_user.apply(content=message["content"], idx=str(i // 2))
+            elif message["role"] == Role.THINK.value:
+                elements += self.format_thought.apply(content=message["content"])
             elif message["role"] == Role.ASSISTANT.value:
                 elements += self.format_assistant.apply(content=message["content"])
             elif message["role"] == Role.OBSERVATION.value:
@@ -325,6 +341,7 @@ def _register_template(
     format_user_suffix: Optional["Formatter"] = None,
     format_user_audio_prefix: Optional["Formatter"] = None,
     format_user_audio_suffix: Optional["Formatter"] = None,
+    format_thought: Optional["Formatter"] = None,
     format_assistant: Optional["Formatter"] = None,
     format_system: Optional["Formatter"] = None,
     format_function: Optional["Formatter"] = None,
@@ -370,10 +387,11 @@ def _register_template(
     template_class = Llama2Template if any(k in name for k in ("llama2", "mistral")) else TemplateFeb
     default_slots = ["{{content}}"] if efficient_eos else ["{{content}}", {"eos_token"}]
     default_user_formatter = StringFormatter(slots=["{{content}}"])
-    default_format_user_prefix = EmptyFormatter()
-    default_format_user_suffix = EmptyFormatter()
-    default_format_user_audio_prefix = EmptyFormatter()
-    default_format_user_audio_suffix = EmptyFormatter()
+    default_user_prefix_formatter = EmptyFormatter()
+    default_user_suffix_formatter = EmptyFormatter()
+    default_user_audio_prefix_formatter = EmptyFormatter()
+    default_user_audio_suffix_formatter = EmptyFormatter()
+    default_thought_formatter = StringFormatter(slots=default_slots)
     default_assistant_formatter = StringFormatter(slots=default_slots)
     default_function_formatter = FunctionFormatter(slots=default_slots, tool_format="default")
     default_tool_formatter = ToolFormatter(tool_format="default")
@@ -381,10 +399,11 @@ def _register_template(
     default_prefix_formatter = EmptyFormatter()
     TEMPLATES[name] = template_class(
         format_user=format_user or default_user_formatter,
-        format_user_prefix=format_user_prefix or default_format_user_prefix,
-        format_user_suffix=format_user_suffix or default_format_user_suffix,
-        format_user_audio_prefix=format_user_audio_prefix or default_format_user_audio_prefix,
-        format_user_audio_suffix=format_user_audio_suffix or default_format_user_audio_suffix,
+        format_user_prefix=format_user_prefix or default_user_prefix_formatter,
+        format_user_suffix=format_user_suffix or default_user_suffix_formatter,
+        format_user_audio_prefix=format_user_audio_prefix or default_user_audio_prefix_formatter,
+        format_user_audio_suffix=format_user_audio_suffix or default_user_audio_suffix_formatter,
+        format_thought=format_thought or default_thought_formatter,
         format_assistant=format_assistant or default_assistant_formatter,
         format_system=format_system or default_user_formatter,
         format_function=format_function or default_function_formatter,
@@ -898,7 +917,6 @@ _register_template(
         slots=[
             (
                 "<|start_header_id|>user<|end_header_id|>\n\n{{content}}<|eot_id|>"
-                "<|start_header_id|>assistant<|end_header_id|>\n\n"
             )
         ]
     ),
@@ -909,7 +927,7 @@ _register_template(
     ),
     format_user_suffix=EmptyFormatter(
         slots=[
-            "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            "<|eot_id|>"
         ]
     ),
     format_user_audio_prefix=EmptyFormatter(
@@ -922,13 +940,18 @@ _register_template(
             "</audio>"
         ]
     ),
+    format_thought=StringFormatter(
+        slots=["<|start_header_id|>thought<|end_header_id|>\n\n{{content}}", {"eos_token"}]
+    ),
+    format_assistant=StringFormatter(
+        slots=["<|start_header_id|>assistant<|end_header_id|>\n\n{{content}}", {"eos_token"}]
+    ),
     format_system=StringFormatter(slots=["<|start_header_id|>system<|end_header_id|>\n\n{{content}}<|eot_id|>"]),
     format_function=FunctionFormatter(slots=["{{content}}", "<|eot_id|>"], tool_format="llama3"),
     format_observation=StringFormatter(
         slots=[
             (
                 "<|start_header_id|>ipython<|end_header_id|>\n\n{{content}}<|eot_id|>"
-                "<|start_header_id|>assistant<|end_header_id|>\n\n"
             )
         ]
     ),

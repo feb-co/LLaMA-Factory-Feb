@@ -24,7 +24,8 @@
 
 from typing import TYPE_CHECKING, List, Optional
 
-from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset, get_template_and_fix_tokenizer
+from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset
+from ...data.template_feb import get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
 from ...extras.logging import get_logger
 from ...extras.misc import calculate_tps, get_logits_processor

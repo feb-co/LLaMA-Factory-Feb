@@ -153,6 +153,8 @@ def _encode_conversation_example(
         input_ids, labels = _encode_normal_message(messages, template, tokenizer, train_on_prompt, mask_history, input_ids, labels)
     elif len(messages)%3 == 0:
         input_ids, labels = _encode_longthought_message(messages, template, tokenizer, train_on_prompt, mask_history, input_ids, labels)
+    else:
+        raise NotImplementedError
 
     assert len(input_ids) == len(labels), "The length of input_ids should equal with labels' length!"
     return prefix_ids, input_ids, labels

@@ -74,11 +74,17 @@ def _encode_avater_audio_example(
     t2a_attention_mask = []
 
     prefix_ids = template.encode_system(tokenizer=tokenizer, system=system, tools=tools)
-    try:
-        encoded_pairs = template.encode_avater_audio(tokenizer=tokenizer, messages=messages)
-    except Exception as e:
-        logger.warning_rank0(e)
-        return None
+
+    retry_time = 0
+    while retry_time < 10:
+        try:
+            encoded_pairs = template.encode_avater_audio(tokenizer=tokenizer, messages=messages)
+            break
+        except Exception as e:
+            retry_time += 1
+            if retry_time >= 10:
+                logger.warning_rank0(e)
+                return None
 
     text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
     audio_start_pos = 0

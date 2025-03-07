@@ -169,12 +169,6 @@ def preprocess_conversation_dataset(
     # for multiturn examples, we only mask the prompt part in each prompt-response pair.
     model_inputs = {"input_ids": [], "attention_mask": [], "labels": []}
     for i in range(len(examples["_prompt"])):
-        if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
-            logger.warning_rank0(
-                "Dropped invalid example: {}".format(examples["_prompt"][i] + examples["_response"][i])
-            )
-            continue
-
         system_ids, input_ids, labels = _encode_conversation_example(
             prompt=examples["_prompt"][i],
             response=examples["_response"][i],
@@ -207,12 +201,6 @@ def preprocess_packed_conversation_dataset(
     batch_input_ids, batch_labels = defaultdict(list), defaultdict(list)
     lengths = defaultdict(list)
     for i in range(len(examples["_prompt"])):
-        if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
-            logger.warning_rank0(
-                "Dropped invalid example: {}".format(examples["_prompt"][i] + examples["_response"][i])
-            )
-            continue
-
         system_ids, input_ids, labels = _encode_conversation_example(
             prompt=examples["_prompt"][i],
             response=examples["_response"][i],

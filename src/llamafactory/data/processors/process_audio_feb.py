@@ -112,16 +112,22 @@ def _encode_avater_audio_example(
 
         # audio output
         if turn_idx == len(encoded_pairs) - 1 and "audio_codes" in target_dict:
-            valid_tokens_pos = [idx for idx in range(
-                len(text_labels)+source_text_len, len(text_labels)+source_text_len+len(target_token_ids)
-            )]
-            audio_codes_ids = target_dict["audio_codes"]
-            audio_codes_labels = copy.deepcopy(target_dict["audio_codes"])
+            if template.name == "llama3":
+                start_prefix_idx = 4
+            else:
+                start_prefix_idx = 0
+
             try:
-                t2a_attention_mask = tokenizer.convert_t2a_attention_mask(target_token_ids, target_dict["audio_codes"])
+                t2a_attention_mask = tokenizer.convert_t2a_attention_mask(target_token_ids[start_prefix_idx:], len(target_dict["audio_codes"][0]))
             except Exception as e:
                 logger.warning_rank0(e)
                 return None
+
+            valid_tokens_pos = [idx for idx in range(
+                len(text_labels)+source_text_len+start_prefix_idx, len(text_labels)+source_text_len+len(target_token_ids)-1
+            )]
+            audio_codes_ids = target_dict["audio_codes"]
+            audio_codes_labels = copy.deepcopy(target_dict["audio_codes"])
 
         text_input_ids += source_token_ids + target_token_ids
         text_labels += source_text_label + target_text_label

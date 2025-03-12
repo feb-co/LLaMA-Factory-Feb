@@ -47,6 +47,7 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class TemplateFeb:
+    name: str
     format_user: "Formatter"
     format_user_prefix: "Formatter"
     format_user_suffix: "Formatter"
@@ -398,6 +399,7 @@ def _register_template(
     default_separator_formatter = EmptyFormatter()
     default_prefix_formatter = EmptyFormatter()
     TEMPLATES[name] = template_class(
+        name=name,
         format_user=format_user or default_user_formatter,
         format_user_prefix=format_user_prefix or default_user_prefix_formatter,
         format_user_suffix=format_user_suffix or default_user_suffix_formatter,

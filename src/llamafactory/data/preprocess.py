@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 def get_preprocess_and_print_func(
     data_args: "DataArguments",
     stage: Literal[
-        "pt", "sft", "rm", "ppo", "kto", "pretrain", "conversation", "instruction", "avater_audio", "avater_audio_packed"
+        "pt", "sft", "rm", "ppo", "kto", "pretrain", "conversation", "instruction", "avater_audio"
     ],
     template: "Template",
     tokenizer: "PreTrainedTokenizer",
@@ -158,24 +158,22 @@ def get_preprocess_and_print_func(
             print_conversation_dataset_example, tokenizer=tokenizer
         )
     elif stage == "avater_audio":
-        preprocess_func = partial(
-            preprocess_avater_audio_dataset,
-            template=template,
-            tokenizer=tokenizer,
-            processor=processor,
-            data_args=data_args,
-        )
-        print_function = partial(
-            print_avater_audio_dataset_example, tokenizer=tokenizer
-        )
-    elif stage == "avater_audio_packed":
-        preprocess_func = partial(
-            preprocess_packed_avater_audio_dataset,
-            template=template,
-            tokenizer=tokenizer,
-            processor=processor,
-            data_args=data_args,
-        )
+        if data_args.packing:
+            preprocess_func = partial(
+                preprocess_packed_avater_audio_dataset,
+                template=template,
+                tokenizer=tokenizer,
+                processor=processor,
+                data_args=data_args,
+            )
+        else:
+            preprocess_func = partial(
+                preprocess_avater_audio_dataset,
+                template=template,
+                tokenizer=tokenizer,
+                processor=processor,
+                data_args=data_args,
+            )
         print_function = partial(
             print_avater_audio_dataset_example, tokenizer=tokenizer
         )

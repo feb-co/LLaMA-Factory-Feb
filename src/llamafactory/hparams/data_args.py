@@ -162,5 +162,5 @@ class DataArguments:
         if self.mask_history and self.train_on_prompt:
             raise ValueError("`mask_history` is incompatible with `train_on_prompt`.")
         
-        if "," in self.tokenized_path:
+        if self.tokenized_path is not None and "," in self.tokenized_path:
             self.tokenized_path = split_arg(self.tokenized_path)

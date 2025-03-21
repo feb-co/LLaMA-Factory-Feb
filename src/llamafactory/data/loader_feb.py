@@ -60,7 +60,7 @@ def _set_start_method():
         if multiprocess.get_start_method() != 'spawn':
             multiprocess.set_start_method('spawn', force=True)
     except RuntimeError:
-        pass  # 如果已经设置过，就忽略错误
+        pass
 
 
 _set_start_method()

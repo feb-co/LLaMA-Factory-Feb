@@ -1,6 +1,7 @@
 
 import io
 import librosa
+import numpy as np
 
 
 def process_audio_bytes(byte_data):
@@ -17,9 +18,12 @@ def process_audio_bytes(byte_data):
 
 
 def resample_audio_array(array, orig_sr, target_sr):
+    if isinstance(array, list):
+        array = np.array(array)
+
     if orig_sr == target_sr:
         return array
-    
+
     array_resampled = librosa.resample(array, orig_sr=orig_sr, target_sr=target_sr)
     return array_resampled
 

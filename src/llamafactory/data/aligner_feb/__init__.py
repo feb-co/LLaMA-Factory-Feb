@@ -24,10 +24,10 @@
 
 from functools import partial
 from typing import TYPE_CHECKING, Union
-from datasets import set_caching_enabled
 
 from .aligner_text import convert_alpaca, convert_document, convert_sharegpt, convert_longthought
 from .aligner_audio import convert_avater_audio, convert_avater_audio_arrow
+from .aligner_audio_arrow_tts import convert_avater_audio_arrow_tts
 from ...extras import logging
 
 
@@ -64,11 +64,13 @@ def align_dataset(
         convert_func = partial(convert_alpaca, dataset_attr=dataset_attr, data_args=data_args)
     elif dataset_attr.formatting == "document":
         convert_func = partial(convert_document, dataset_attr=dataset_attr, data_args=data_args)
-    elif dataset_attr.formatting == "audio":
-        convert_func = partial(convert_avater_audio, dataset_attr=dataset_attr, data_args=data_args)
     elif dataset_attr.formatting == "longthought":
         convert_func = partial(convert_longthought, dataset_attr=dataset_attr, data_args=data_args)
-    elif "audio_arrow" in dataset_attr.formatting:
+    elif dataset_attr.formatting == "audio":
+        convert_func = partial(convert_avater_audio, dataset_attr=dataset_attr, data_args=data_args)
+    elif dataset_attr.formatting == "audio_arrow_tts":
+        convert_func = partial(convert_avater_audio_arrow_tts, dataset_attr=dataset_attr, data_args=data_args)
+    elif dataset_attr.formatting == "audio_arrow_asr":
         convert_func = partial(convert_avater_audio_arrow, dataset_attr=dataset_attr, data_args=data_args)
     else:
         convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, data_args=data_args)
@@ -80,9 +82,18 @@ def align_dataset(
             desc="Converting format of dataset",
         )
 
+    # 根据数据集类型设置批处理参数
+    is_batch_dataset = (
+        dataset_attr.formatting == "audio_arrow_tts" 
+        and any(key in dataset_attr.dataset_key for key in ["dialogue_", "packed_"])
+    )
+    kwargs.update({
+        "batched": is_batch_dataset,
+        "batch_size": 16 if is_batch_dataset else None
+    })
+
     return dataset.map(
         convert_func,
-        batched=False,
         remove_columns=column_names,
         **kwargs,
     )

@@ -42,6 +42,7 @@ class DatasetAttr:
     # basic configs
     load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file", "arrow"]
     dataset_name: str
+    dataset_key: str = None
     stage: Literal["pretrain", "conversation", "instruction", "avater_audio"] = "conversation"
     formatting: Literal["alpaca", "sharegpt", "document", "longthought", "audio", "audio_arrow_asr", "audio_arrow_tts"] = "sharegpt"
     ranking: bool = False
@@ -54,6 +55,7 @@ class DatasetAttr:
 
     # common columns
     system: Optional[str] = None
+    system_list: Optional[list] = None
     tools: Optional[str] = None
     images: Optional[str] = None
     videos: Optional[str] = None
@@ -143,17 +145,17 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
 
         if has_hf_url or has_ms_url or has_om_url:
             if has_ms_url and (use_modelscope() or not has_hf_url):
-                dataset_attr = DatasetAttr("ms_hub", dataset_name=dataset_info[name]["ms_hub_url"])
+                dataset_attr = DatasetAttr("ms_hub", dataset_name=dataset_info[name]["ms_hub_url"], dataset_key=name)
             elif has_om_url and (use_openmind() or not has_hf_url):
-                dataset_attr = DatasetAttr("om_hub", dataset_name=dataset_info[name]["om_hub_url"])
+                dataset_attr = DatasetAttr("om_hub", dataset_name=dataset_info[name]["om_hub_url"], dataset_key=name)
             else:
-                dataset_attr = DatasetAttr("hf_hub", dataset_name=dataset_info[name]["hf_hub_url"])
+                dataset_attr = DatasetAttr("hf_hub", dataset_name=dataset_info[name]["hf_hub_url"], dataset_key=name)
         elif "script_url" in dataset_info[name]:
-            dataset_attr = DatasetAttr("script", dataset_name=dataset_info[name]["script_url"])
+            dataset_attr = DatasetAttr("script", dataset_name=dataset_info[name]["script_url"], dataset_key=name)
         elif "arrow_directory" in dataset_info[name]:
-            dataset_attr = DatasetAttr("arrow", dataset_name=dataset_info[name]["arrow_directory"])
+            dataset_attr = DatasetAttr("arrow", dataset_name=dataset_info[name]["arrow_directory"], dataset_key=name)
         else:
-            dataset_attr = DatasetAttr("file", dataset_name=dataset_info[name]["file_name"])
+            dataset_attr = DatasetAttr("file", dataset_name=dataset_info[name]["file_name"], dataset_key=name)
 
         dataset_attr.set_attr("stage", dataset_info[name])
         dataset_attr.set_attr("formatting", dataset_info[name], default="sharegpt")
@@ -169,6 +171,8 @@ def get_dataset_list(dataset_names: Optional[Sequence[str]], dataset_dir: str) -
                 column_names.extend(["prompt", "query", "response", "history"])
             elif dataset_attr.formatting == "document":
                 column_names.extend(["prefix", "document"])
+            elif "audio" in dataset_attr.formatting:
+                column_names.extend(["system_list"])
             else:
                 column_names.extend(["messages"])
 

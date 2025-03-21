@@ -23,6 +23,7 @@
 
 
 import json
+import random
 import soundfile as sf
 from typing import TYPE_CHECKING, Any, Dict
 
@@ -82,7 +83,7 @@ def convert_avater_audio(
             print(f"Invalid role tag in {messages}.")
             broken_data = True
 
-        if message[dataset_attr.role_tag] == dataset_attr.user_audio_tag:
+        if message[dataset_attr.role_tag].lower() == dataset_attr.user_audio_tag:
             aligned_message = {
                 "role": tag_mapping[message[dataset_attr.role_tag].lower()],
                 "content": []
@@ -91,7 +92,11 @@ def convert_avater_audio(
                 if item["type"] != "audio":
                     aligned_message["content"].append(item)
                 else:
-                    audio_array, sample_rate = sf.read(item["file"])
+                    try:
+                        audio_array, sample_rate = sf.read(item["file"])
+                    except:
+                        broken_data = True
+                        break
                     aligned_message["content"] += split_user_audio(
                         audio_array,
                         sample_rate,
@@ -99,10 +104,14 @@ def convert_avater_audio(
                         duration=30
                     )
             aligned_messages.append(aligned_message)
-        elif message[dataset_attr.role_tag] == dataset_attr.assistant_audio_tag:
+        elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag:
             audios = []
             for item in message["audios"]:
-                array, sample_rate = sf.read(item["file"])
+                try:
+                    array, sample_rate = sf.read(item["file"])
+                except:
+                    broken_data = True
+                    break
                 audios.append({
                     "id": item["id"],
                     "array": resample_audio_array(
@@ -154,64 +163,3 @@ def convert_avater_audio_arrow(
         return convert_LargeScaleASR(example, dataset_attr, data_args)
     else:
         raise NotImplementedError
-
-
-def convert_LargeScaleASR(
-    example: Dict[str, Any],
-    dataset_attr: "DatasetAttr",
-    data_args: "DataArguments",
-) -> Dict[str, Any]:
-    system = dataset_attr.system if dataset_attr.system else ""
-
-    try:
-        example_id = example["ID"]
-        audio_text = example["text"].lower()
-        audio_array, samples_rate = process_audio_bytes(example["wav"]["bytes"])
-        if dataset_attr.formatting == "audio_arrow_asr":
-            prompt = [{
-                "role": Role.USER_AUDIO.value,
-                "content": split_user_audio(
-                    audio_array,
-                    samples_rate,
-                    target_sr=16000,
-                    duration=30
-                ),
-            }]
-            response = [{
-                "role": Role.ASSISTANT.value,
-                "content": audio_text,
-            }]
-        elif dataset_attr.formatting == "audio_arrow_tts":
-            prompt = [{
-                "role": Role.USER.value,
-                "content": audio_text,
-            }]
-            response = [{
-                "role": Role.ASSISTANT_AUDIO.value,
-                "content": audio_text,
-                "audios": [{
-                    "id": example_id,
-                    "array": resample_audio_array(
-                        audio_array,
-                        orig_sr=samples_rate,
-                        target_sr=24000
-                    ),
-                    "split": ""
-                }]
-            }]
-        else:
-            raise NotImplementedError
-    except Exception as e:
-        logger.warning_rank0(e)
-        prompt = []
-        response = []
-
-    output = {
-        "_prompt": prompt,
-        "_response": response,
-        "_system": system,
-        "_tools": example[dataset_attr.tools] if dataset_attr.tools else "",
-        "_images": None,
-        "_videos": None,
-    }
-    return output

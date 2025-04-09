@@ -113,7 +113,7 @@ def _encode_avater_audio_example(
         # audio output
         if turn_idx == len(encoded_pairs) - 1 and "audio_codes" in target_dict:
             if template.name == "llama3":
-                start_prefix_idx = 4
+                start_prefix_idx = 3
             else:
                 start_prefix_idx = 0
 

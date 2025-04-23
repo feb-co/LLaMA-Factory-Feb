@@ -135,6 +135,16 @@ def _encode_avater_audio_example(
 
     assert len(text_input_ids) == len(text_labels), "The length of text_input_ids should equal with labels' length!"
     assert len(audio_codes_ids) == len(audio_codes_labels), "The length of audio_codes_ids should equal with labels' length!"
+
+    right = (
+        len(t2a_attention_mask) == len(audio_codes_ids[0])
+        and len(t2a_attention_mask[0]) == len(valid_tokens_pos)
+        and len(audio_codes_ids) == len(audio_codes_labels)
+        and len(audio_codes_ids[0]) == len(audio_codes_labels[0])
+    )
+    if not right:
+        return None
+
     return {
         "prefix_ids": prefix_ids,
         "text_input_ids": text_input_ids, "text_labels": text_labels,

@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,11 +17,9 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, NamedTuple, Tuple, Union
+from typing import Any, NamedTuple, Union
 
 from typing_extensions import override
-
-from .data_utils import SLOTS
 
 
 class FunctionCall(NamedTuple):
@@ -56,37 +54,30 @@ QWEN_TOOL_PROMPT = (
     "You are provided with function signatures within <tools></tools> XML tags:\n<tools>{tool_text}"
     "\n</tools>\n\nFor each function call, return a json object with function name and arguments within "
     """<tool_call></tool_call> XML tags:\n<tool_call>\n{{"name": <function-name>, """
-    """"arguments": <args-json-object>}}\n</tool_call><|im_end|>\n"""
+    """"arguments": <args-json-object>}}\n</tool_call>"""
 )
 
 
 @dataclass
 class ToolUtils(ABC):
-    """
-    Base class for tool utilities.
-    """
+    """Base class for tool utilities."""
 
     @staticmethod
     @abstractmethod
-    def tool_formatter(tools: List[Dict[str, Any]]) -> str:
-        r"""
-        Generates the system message describing all the available tools.
-        """
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
+        r"""Generate the system message describing all the available tools."""
         ...
 
     @staticmethod
     @abstractmethod
-    def function_formatter(functions: List["FunctionCall"]) -> SLOTS:
-        r"""
-        Generates the assistant message including all the tool calls.
-        """
+    def function_formatter(functions: list["FunctionCall"]) -> str:
+        r"""Generate the assistant message including all the tool calls."""
         ...
 
     @staticmethod
     @abstractmethod
-    def tool_extractor(content: str) -> Union[str, List["FunctionCall"]]:
-        r"""
-        Extracts all the function calls from the assistant message.
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
+        r"""Extract all the function calls from the assistant message.
 
         It should be an inverse function of `function_formatter`.
         """
@@ -94,13 +85,11 @@ class ToolUtils(ABC):
 
 
 class DefaultToolUtils(ToolUtils):
-    r"""
-    Default tool using template.
-    """
+    r"""Default tool using template."""
 
     @override
     @staticmethod
-    def tool_formatter(tools: List[Dict[str, Any]]) -> str:
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
         tool_text = ""
         tool_names = []
         for tool in tools:
@@ -134,18 +123,18 @@ class DefaultToolUtils(ToolUtils):
 
     @override
     @staticmethod
-    def function_formatter(functions: List["FunctionCall"]) -> SLOTS:
+    def function_formatter(functions: list["FunctionCall"]) -> str:
         function_text = ""
         for name, arguments in functions:
             function_text += f"Action: {name}\nAction Input: {arguments}\n"
 
-        return [function_text]
+        return function_text
 
     @override
     @staticmethod
-    def tool_extractor(content: str) -> Union[str, List["FunctionCall"]]:
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
         regex = re.compile(r"Action:\s*([a-zA-Z0-9_]+)\s*Action Input:\s*(.+?)(?=\s*Action:|\s*$)", re.DOTALL)
-        action_match: List[Tuple[str, str]] = re.findall(regex, content)
+        action_match: list[tuple[str, str]] = re.findall(regex, content)
         if not action_match:
             return content
 
@@ -163,13 +152,11 @@ class DefaultToolUtils(ToolUtils):
 
 
 class GLM4ToolUtils(ToolUtils):
-    r"""
-    GLM-4 tool using template.
-    """
+    r"""GLM-4 tool using template."""
 
     @override
     @staticmethod
-    def tool_formatter(tools: List[Dict[str, Any]]) -> str:
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
         tool_text = ""
         for tool in tools:
             tool_text += "\n\n## {name}\n\n{body}\n在调用上述函数时，请使用 Json 格式表示调用的参数。".format(
@@ -180,15 +167,15 @@ class GLM4ToolUtils(ToolUtils):
 
     @override
     @staticmethod
-    def function_formatter(functions: List["FunctionCall"]) -> SLOTS:
+    def function_formatter(functions: list["FunctionCall"]) -> str:
         if len(functions) > 1:
             raise ValueError("GLM-4 does not support parallel functions.")
 
-        return [f"{functions[0].name}\n{functions[0].arguments}"]
+        return f"{functions[0].name}\n{functions[0].arguments}"
 
     @override
     @staticmethod
-    def tool_extractor(content: str) -> Union[str, List["FunctionCall"]]:
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
         if "\n" not in content:
             return content
 
@@ -202,15 +189,14 @@ class GLM4ToolUtils(ToolUtils):
 
 
 class Llama3ToolUtils(ToolUtils):
-    r"""
-    Llama 3.x tool using template with `tools_in_user_message=False`.
+    r"""Llama 3.x tool using template with `tools_in_user_message=False`.
 
     Reference: https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_1/#json-based-tool-calling
     """
 
     @override
     @staticmethod
-    def tool_formatter(tools: List[Dict[str, Any]]) -> str:
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
         date = datetime.now().strftime("%d %b %Y")
         tool_text = ""
         for tool in tools:
@@ -221,15 +207,15 @@ class Llama3ToolUtils(ToolUtils):
 
     @override
     @staticmethod
-    def function_formatter(functions: List["FunctionCall"]) -> SLOTS:
+    def function_formatter(functions: list["FunctionCall"]) -> str:
         if len(functions) > 1:
             raise ValueError("Llama-3 does not support parallel functions.")
 
-        return [f'{{"name": "{functions[0].name}", "parameters": {functions[0].arguments}}}']
+        return f'{{"name": "{functions[0].name}", "parameters": {functions[0].arguments}}}'
 
     @override
     @staticmethod
-    def tool_extractor(content: str) -> Union[str, List["FunctionCall"]]:
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
         try:
             tool = json.loads(content.strip())
         except json.JSONDecodeError:
@@ -242,13 +228,11 @@ class Llama3ToolUtils(ToolUtils):
 
 
 class MistralToolUtils(ToolUtils):
-    r"""
-    Mistral v0.3 tool using template.
-    """
+    r"""Mistral v0.3 tool using template."""
 
     @override
     @staticmethod
-    def tool_formatter(tools: List[Dict[str, Any]]) -> str:
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
         wrapped_tools = []
         for tool in tools:
             wrapped_tools.append({"type": "function", "function": tool})
@@ -257,16 +241,16 @@ class MistralToolUtils(ToolUtils):
 
     @override
     @staticmethod
-    def function_formatter(functions: List["FunctionCall"]) -> SLOTS:
+    def function_formatter(functions: list["FunctionCall"]) -> str:
         function_texts = []
         for name, arguments in functions:
             function_texts.append(f'{{"name": "{name}", "arguments": {arguments}}}')
 
-        return ["[" + ", ".join(function_texts) + "]"]
+        return "[" + ", ".join(function_texts) + "]"
 
     @override
     @staticmethod
-    def tool_extractor(content: str) -> Union[str, List["FunctionCall"]]:
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
         try:
             tools = json.loads(content.strip())
         except json.JSONDecodeError:
@@ -286,13 +270,11 @@ class MistralToolUtils(ToolUtils):
 
 
 class QwenToolUtils(ToolUtils):
-    r"""
-    Qwen 2.5 tool using template.
-    """
+    r"""Qwen 2.5 tool using template."""
 
     @override
     @staticmethod
-    def tool_formatter(tools: List[Dict[str, Any]]) -> str:
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
         tool_text = ""
         for tool in tools:
             wrapped_tool = {"type": "function", "function": tool}
@@ -302,20 +284,20 @@ class QwenToolUtils(ToolUtils):
 
     @override
     @staticmethod
-    def function_formatter(functions: List["FunctionCall"]) -> SLOTS:
+    def function_formatter(functions: list["FunctionCall"]) -> str:
         function_texts = []
         for name, arguments in functions:
             function_texts.append(
                 "<tool_call>\n" + f'{{"name": "{name}", "arguments": {arguments}}}' + "\n</tool_call>"
             )
 
-        return ["\n".join(function_texts)]
+        return "\n".join(function_texts)
 
     @override
     @staticmethod
-    def tool_extractor(content: str) -> Union[str, List["FunctionCall"]]:
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
         regex = re.compile(r"<tool_call>(.+?)</tool_call>(?=\s*<tool_call>|\s*$)", re.DOTALL)
-        tool_match: List[str] = re.findall(regex, content)
+        tool_match: list[str] = re.findall(regex, content)
         if not tool_match:
             return content
 

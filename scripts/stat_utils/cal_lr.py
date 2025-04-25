@@ -1,4 +1,4 @@
-# Copyright 2024 imoneoi and the LlamaFactory team.
+# Copyright 2025 imoneoi and the LlamaFactory team.
 #
 # This code is inspired by the imoneoi's OpenChat library.
 # https://github.com/imoneoi/openchat/blob/3.6.0/ochat/training_deepspeed/train.py
@@ -41,12 +41,12 @@ def calculate_lr(
     dataset: str = "alpaca_en_demo",
     dataset_dir: str = "data",
     template: str = "default",
-    cutoff_len: int = 1024,  # i.e. maximum input length during training
+    cutoff_len: int = 2048,  # i.e. maximum input length during training
     is_mistral_or_gemma: bool = False,  # mistral and gemma models opt for a smaller learning rate,
     packing: bool = False,
 ):
-    r"""
-    Calculates the optimal learning rate for 7B/13B models using LLaMA's hyper-parameters.
+    r"""Calculate the optimal learning rate for 7B/13B models using LLaMA's hyper-parameters.
+
     Usage:
     python cal_lr.py --model_name_or_path path_to_model --dataset alpaca_en_demo --cutoff_len 1024 --batch_size 16
     """
@@ -59,6 +59,7 @@ def calculate_lr(
             template=template,
             cutoff_len=cutoff_len,
             packing=packing,
+            preprocessing_num_workers=16,
             output_dir="dummy_dir",
             overwrite_cache=True,
             do_train=True,
@@ -79,7 +80,7 @@ def calculate_lr(
 
     dataloader = DataLoader(trainset, batch_size, shuffle=False, collate_fn=data_collator, pin_memory=True)
     valid_tokens, total_tokens = 0, 0
-    for batch in tqdm(dataloader):
+    for batch in tqdm(dataloader, desc="Collecting valid tokens"):
         valid_tokens += torch.sum(batch["labels"] != IGNORE_INDEX).item()
         total_tokens += torch.numel(batch["labels"])
 
@@ -88,9 +89,8 @@ def calculate_lr(
     lr = BASE_LR * math.sqrt(token_batch_size / BASE_BS)  # lr ~ sqrt(batch_size)
     lr = lr / 6.0 if is_mistral_or_gemma else lr
     print(
-        "Optimal learning rate is {:.2e} for valid ratio% {:.2f} and effective token batch size {:.2f}".format(
-            lr, valid_ratio * 100, token_batch_size
-        )
+        f"Optimal learning rate is {lr:.2e} for valid ratio% {valid_ratio * 100:.2f} "
+        f"and effective token batch size {token_batch_size:.2f}"
     )
 
 

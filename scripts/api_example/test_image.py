@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ require_version("openai>=1.5.0", "To fix: pip install openai>=1.5.0")
 
 def main():
     client = OpenAI(
-        api_key="{}".format(os.environ.get("API_KEY", "0")),
-        base_url="http://localhost:{}/v1".format(os.environ.get("API_PORT", 8000)),
+        api_key="{}".format(os.getenv("API_KEY", "0")),
+        base_url="http://localhost:{}/v1".format(os.getenv("API_PORT", 8000)),
     )
     messages = []
     messages.append(

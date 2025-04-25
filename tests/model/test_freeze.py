@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import torch
 from llamafactory.train.test_utils import load_infer_model, load_train_model
 
 
-TINY_LLAMA = os.getenv("TINY_LLAMA", "llamafactory/tiny-random-Llama-3")
+TINY_LLAMA3 = os.getenv("TINY_LLAMA3", "llamafactory/tiny-random-Llama-3")
 
 TRAIN_ARGS = {
-    "model_name_or_path": TINY_LLAMA,
+    "model_name_or_path": TINY_LLAMA3,
     "stage": "sft",
     "do_train": True,
     "finetuning_type": "freeze",
@@ -30,14 +30,13 @@ TRAIN_ARGS = {
     "dataset_dir": "ONLINE",
     "template": "llama3",
     "cutoff_len": 1024,
-    "overwrite_cache": True,
     "output_dir": "dummy_dir",
     "overwrite_output_dir": True,
     "fp16": True,
 }
 
 INFER_ARGS = {
-    "model_name_or_path": TINY_LLAMA,
+    "model_name_or_path": TINY_LLAMA3,
     "finetuning_type": "freeze",
     "template": "llama3",
     "infer_dtype": "float16",

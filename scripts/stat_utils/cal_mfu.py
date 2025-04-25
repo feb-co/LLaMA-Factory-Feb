@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,9 +34,7 @@ def compute_model_flops(
     include_recompute: bool = False,
     include_flashattn: bool = False,
 ) -> int:
-    r"""
-    Calculates the FLOPs of model per forward/backward pass.
-    """
+    r"""Calculate the FLOPs of model per forward/backward pass."""
     config = AutoConfig.from_pretrained(model_name_or_path)
     hidden_size = getattr(config, "hidden_size", None)
     vocab_size = getattr(config, "vocab_size", None)
@@ -86,9 +84,7 @@ def compute_model_flops(
 
 
 def compute_device_flops(world_size: int) -> float:
-    r"""
-    Calculates the FLOPs of the device capability per second.
-    """
+    r"""Calculate the FLOPs of the device capability per second."""
     device_name = torch.cuda.get_device_name()
     if "H100" in device_name or "H800" in device_name:
         return 989 * 1e12 * world_size
@@ -114,8 +110,8 @@ def calculate_mfu(
     liger_kernel: bool = False,
     unsloth_gc: bool = False,
 ) -> float:
-    r"""
-    Calculates MFU for given model and hyper-params.
+    r"""Calculate MFU for given model and hyper-params.
+
     Usage: python cal_mfu.py --model_name_or_path path_to_model --batch_size 1 --seq_length 1024
     """
     args = {
@@ -142,21 +138,23 @@ def calculate_mfu(
         args["deepspeed"] = f"examples/deepspeed/ds_z{deepspeed_stage}_config.json"
 
     run_exp(args)
-    with open(os.path.join("saves", "test_mfu", "all_results.json"), encoding="utf-8") as f:
-        result = json.load(f)
-
     if dist.is_initialized():
+        dist.barrier()
         world_size = dist.get_world_size()
     else:
         world_size = 1
 
-    total_batch_size = batch_size * world_size
-    mfu_value = (
-        result["train_steps_per_second"]
-        * compute_model_flops(model_name_or_path, total_batch_size, seq_length)
-        / compute_device_flops(world_size)
-    )
-    print(f"MFU: {mfu_value * 100:.2f}%")
+    if int(os.getenv("LOCAL_RANK", "0")) == 0:
+        with open(os.path.join("saves", "test_mfu", "all_results.json"), encoding="utf-8") as f:
+            result = json.load(f)
+
+        total_batch_size = batch_size * world_size
+        mfu_value = (
+            result["train_steps_per_second"]
+            * compute_model_flops(model_name_or_path, total_batch_size, seq_length)
+            / compute_device_flops(world_size)
+        )
+        print(f"MFU: {mfu_value * 100:.2f}%")
 
 
 if __name__ == "__main__":

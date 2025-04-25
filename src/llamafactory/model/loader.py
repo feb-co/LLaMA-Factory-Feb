@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, TypedDict
+import os
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq, AutoProcessor, AutoTokenizer
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoModelForTextToWaveform,
+    AutoModelForVision2Seq,
+    AutoProcessor,
+    AutoTokenizer,
+)
 from trl import AutoModelForCausalLMWithValueHead
 
 from ..extras import logging
 from ..extras.misc import count_parameters, skip_check_imports, try_download_model_from_other_hub
+from ..extras.packages import is_transformers_version_greater_than
 from .adapter import init_adapter
 from .model_utils.liger_kernel import apply_liger_kernel
 from .model_utils.misc import register_autoclass
@@ -27,6 +37,10 @@ from .model_utils.mod import convert_pretrained_model_to_mod, load_mod_pretraine
 from .model_utils.unsloth import load_unsloth_pretrained_model
 from .model_utils.valuehead import load_valuehead_params
 from .patcher import patch_config, patch_model, patch_processor, patch_tokenizer, patch_valuehead_model
+
+
+if is_transformers_version_greater_than("4.46.0"):
+    from transformers import AutoModelForImageTextToText
 
 
 if TYPE_CHECKING:
@@ -43,9 +57,8 @@ class TokenizerModule(TypedDict):
     processor: Optional["ProcessorMixin"]
 
 
-def _get_init_kwargs(model_args: "ModelArguments") -> Dict[str, Any]:
-    r"""
-    Gets arguments to load config/tokenizer/model.
+def _get_init_kwargs(model_args: "ModelArguments") -> dict[str, Any]:
+    r"""Get arguments to load config/tokenizer/model.
 
     Note: including inplace operation of model_args.
     """
@@ -60,13 +73,11 @@ def _get_init_kwargs(model_args: "ModelArguments") -> Dict[str, Any]:
 
 
 def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
-    r"""
-    Loads pretrained tokenizer and optionally loads processor.
+    r"""Load pretrained tokenizer and optionally loads processor.
 
     Note: including inplace operation of model_args.
     """
     init_kwargs = _get_init_kwargs(model_args)
-    config = load_config(model_args)
     try:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
@@ -85,36 +96,25 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
     except Exception as e:
         raise OSError("Failed to load tokenizer.") from e
 
-    if model_args.new_special_tokens is not None:
-        num_added_tokens = tokenizer.add_special_tokens(
-            dict(additional_special_tokens=model_args.new_special_tokens),
-            replace_additional_special_tokens=False,
-        )
-        logger.info_rank0("Add {} to special tokens.".format(",".join(model_args.new_special_tokens)))
-        if num_added_tokens > 0 and not model_args.resize_vocab:
-            model_args.resize_vocab = True
-            logger.warning_rank0("New tokens have been added, changed `resize_vocab` to True.")
-
-    patch_tokenizer(tokenizer)
+    patch_tokenizer(tokenizer, model_args)
     try:
         processor = AutoProcessor.from_pretrained(model_args.model_name_or_path, **init_kwargs)
-        patch_processor(processor, config, tokenizer, model_args)
+        patch_processor(processor, tokenizer, model_args)
     except Exception as e:
-        logger.debug(f"Processor was not found: {e}.")
+        logger.info_rank0(f"Failed to load processor: {e}.")
         processor = None
 
     # Avoid load tokenizer, see:
     # https://github.com/huggingface/transformers/blob/v4.40.0/src/transformers/models/auto/processing_auto.py#L324
     if processor is not None and "Processor" not in processor.__class__.__name__:
+        logger.debug("The loaded processor is not an instance of Processor. Dropping it.")
         processor = None
 
     return {"tokenizer": tokenizer, "processor": processor}
 
 
 def load_config(model_args: "ModelArguments") -> "PretrainedConfig":
-    r"""
-    Loads model config.
-    """
+    r"""Load model config."""
     init_kwargs = _get_init_kwargs(model_args)
     return AutoConfig.from_pretrained(model_args.model_name_or_path, **init_kwargs)
 
@@ -126,9 +126,7 @@ def load_model(
     is_trainable: bool = False,
     add_valuehead: bool = False,
 ) -> "PreTrainedModel":
-    r"""
-    Loads pretrained model.
-    """
+    r"""Load pretrained model."""
     init_kwargs = _get_init_kwargs(model_args)
     config = load_config(model_args)
     patch_config(config, tokenizer, model_args, init_kwargs, is_trainable)
@@ -149,8 +147,17 @@ def load_model(
         if model_args.mixture_of_depths == "load":
             model = load_mod_pretrained_model(**init_kwargs)
         else:
-            if type(config) in AutoModelForVision2Seq._model_mapping.keys():  # assume built-in models
+            if type(config) in AutoModelForVision2Seq._model_mapping.keys():  # image-text
                 load_class = AutoModelForVision2Seq
+            elif (
+                is_transformers_version_greater_than("4.46.0")
+                and type(config) in AutoModelForImageTextToText._model_mapping.keys()
+            ):  # image-text
+                load_class = AutoModelForImageTextToText
+            elif type(config) in AutoModelForSeq2SeqLM._model_mapping.keys():  # audio-text
+                load_class = AutoModelForSeq2SeqLM
+            elif type(config) in AutoModelForTextToWaveform._model_mapping.keys():  # audio hack for qwen2_5_omni
+                load_class = AutoModelForTextToWaveform
             else:
                 load_class = AutoModelForCausalLM
 
@@ -158,6 +165,8 @@ def load_model(
                 model = load_class.from_config(config, trust_remote_code=model_args.trust_remote_code)
             else:
                 model = load_class.from_pretrained(**init_kwargs)
+                if getattr(model.config, "model_type", None) == "qwen2_5_omni":
+                    model = model.thinker  # use part of Omni model
 
         if model_args.mixture_of_depths == "convert":
             model = convert_pretrained_model_to_mod(model, config, model_args)
@@ -194,20 +203,17 @@ def load_model(
 
     trainable_params, all_param = count_parameters(model)
     if is_trainable:
-        param_stats = "trainable params: {:,} || all params: {:,} || trainable%: {:.4f}".format(
-            trainable_params, all_param, 100 * trainable_params / all_param
+        param_stats = (
+            f"trainable params: {trainable_params:,} || "
+            f"all params: {all_param:,} || trainable%: {100 * trainable_params / all_param:.4f}"
         )
     else:
         param_stats = f"all params: {all_param:,}"
 
     logger.info_rank0(param_stats)
 
-    if model_args.print_param_status:
+    if model_args.print_param_status and int(os.getenv("LOCAL_RANK", "0")) == 0:
         for name, param in model.named_parameters():
-            print(
-                "name: {}, dtype: {}, device: {}, trainable: {}".format(
-                    name, param.dtype, param.device, param.requires_grad
-                )
-            )
+            print(f"name: {name}, dtype: {param.dtype}, device: {param.device}, trainable: {param.requires_grad}")
 
     return model

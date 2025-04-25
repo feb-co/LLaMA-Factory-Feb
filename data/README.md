@@ -4,9 +4,10 @@ Currently we support datasets in **alpaca** and **sharegpt** format.
 
 ```json
 "dataset_name": {
-  "hf_hub_url": "the name of the dataset repository on the Hugging Face hub. (if specified, ignore script_url and file_name)",
-  "ms_hub_url": "the name of the dataset repository on the Model Scope hub. (if specified, ignore script_url and file_name)",
-  "script_url": "the name of the directory containing a dataset loading script. (if specified, ignore file_name)",
+  "hf_hub_url": "the name of the dataset repository on the Hugging Face hub. (if specified, ignore script_url, file_name and cloud_file_name)",
+  "ms_hub_url": "the name of the dataset repository on the Model Scope hub. (if specified, ignore script_url, file_name and cloud_file_name)",
+  "script_url": "the name of the directory containing a dataset loading script. (if specified, ignore file_name and cloud_file_name)",
+  "cloud_file_name": "the name of the dataset file in s3/gcs cloud storage. (if specified, ignore file_name)",
   "file_name": "the name of the dataset folder or dataset file in this directory. (required if above are not specified)",
   "formatting": "the format of the dataset. (optional, default: alpaca, can be chosen from {alpaca, sharegpt})",
   "ranking": "whether the dataset is a preference dataset or not. (default: False)",
@@ -24,6 +25,7 @@ Currently we support datasets in **alpaca** and **sharegpt** format.
     "tools": "the column name in the dataset containing the tool description. (default: None)",
     "images": "the column name in the dataset containing the image inputs. (default: None)",
     "videos": "the column name in the dataset containing the videos inputs. (default: None)",
+    "audios": "the column name in the dataset containing the audios inputs. (default: None)",
     "chosen": "the column name in the dataset containing the chosen answers. (default: None)",
     "rejected": "the column name in the dataset containing the rejected answers. (default: None)",
     "kto_tag": "the column name in the dataset containing the kto tags. (default: None)"
@@ -84,7 +86,7 @@ Regarding the above dataset, the *dataset description* in `dataset_info.json` sh
 
 ### Pre-training Dataset
 
-- [Example dataset](c4_demo.json)
+- [Example dataset](c4_demo.jsonl)
 
 In pre-training, only the `text` column will be used for model learning.
 
@@ -149,6 +151,10 @@ An additional column `images` is required. Please refer to the [sharegpt](#share
 ### Multimodal Video Dataset
 
 An additional column `videos` is required. Please refer to the [sharegpt](#sharegpt-format) format for details.
+
+### Multimodal Audio Dataset
+
+An additional column `audios` is required. Please refer to the [sharegpt](#sharegpt-format) format for details.
 
 ## Sharegpt Format
 
@@ -296,7 +302,7 @@ Regarding the above dataset, the *dataset description* in `dataset_info.json` sh
 
 - [Example dataset](mllm_demo.json)
 
-Multimodal image datasets require a `images` column containing the paths to the input images.
+Multimodal image datasets require an `images` column containing the paths to the input images.
 
 The number of images should be identical to the `<image>` tokens in the conversations.
 
@@ -370,6 +376,47 @@ Regarding the above dataset, the *dataset description* in `dataset_info.json` sh
   "columns": {
     "messages": "conversations",
     "videos": "videos"
+  }
+}
+```
+
+### Multimodal Audio Dataset
+
+- [Example dataset](mllm_audio_demo.json)
+
+Multimodal audio datasets require an `audios` column containing the paths to the input audios.
+
+The number of audios should be identical to the `<audio>` tokens in the conversations.
+
+```json
+[
+  {
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<audio>human instruction"
+      },
+      {
+        "from": "gpt",
+        "value": "model response"
+      }
+    ],
+    "audios": [
+      "audio path (required)"
+    ]
+  }
+]
+```
+
+Regarding the above dataset, the *dataset description* in `dataset_info.json` should be:
+
+```json
+"dataset_name": {
+  "file_name": "data.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "conversations",
+    "audios": "audios"
   }
 }
 ```

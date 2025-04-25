@@ -4,7 +4,7 @@
 # Licheng Wang (FEB team)
 #
 # The MIT License (MIT)
-# Copyright (c) 2024 Licheng Wang (FEB team)
+# Copyright (c) 2025 Licheng Wang (FEB team)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software
 # and associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -25,20 +25,19 @@
 import os
 import sys
 import glob
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
-from datasets import DatasetDict, load_dataset, load_from_disk, set_caching_enabled
-from transformers.utils.versions import require_version
+from datasets import DatasetDict, load_dataset, load_from_disk
 
 from ..extras import logging
 from ..extras.constants import FILEEXT2TYPE
-from ..extras.misc import has_tokenized_data
-from .data_utils import merge_dataset, split_dataset
-from .preprocess import get_preprocess_and_print_func
-
-from .aligner_feb import align_dataset
+from ..extras.misc import check_version, has_tokenized_data
+from .converter_feb import align_dataset
+from .data_utils import get_dataset_module, merge_dataset, read_cloud_json, split_dataset
 from .parser_feb import get_dataset_list
+from .processor_feb import get_preprocess_and_print_func
+
 
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
@@ -46,9 +45,8 @@ if TYPE_CHECKING:
 
     from ..hparams import DataArguments, ModelArguments
     from .data_utils import DatasetModule
-    from .template import Template
-    
     from .parser_feb import DatasetAttr
+    from .template_feb import TemplateFeb
 
 
 logger = logging.get_logger(__name__)
@@ -72,9 +70,7 @@ def _load_single_dataset(
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
 ) -> Union["Dataset", "IterableDataset"]:
-    r"""
-    Loads a single dataset and aligns it to the standard format.
-    """
+    r"""Load a single dataset and aligns it to the standard format."""
     logger.info_rank0(f"Loading dataset {dataset_attr}...")
     data_path, data_name, data_dir, data_files = None, None, None, None
     if dataset_attr.load_from in ["hf_hub", "ms_hub", "om_hub"]:
@@ -86,7 +82,8 @@ def _load_single_dataset(
         data_path = os.path.join(data_args.dataset_dir, dataset_attr.dataset_name)
         data_name = dataset_attr.subset
         data_dir = dataset_attr.folder
-
+    elif dataset_attr.load_from == "cloud_file":
+        data_path = dataset_attr.dataset_name
     elif dataset_attr.load_from == "file":
         data_files = []
         local_path = os.path.join(data_args.dataset_dir, dataset_attr.dataset_name)
@@ -121,7 +118,7 @@ def _load_single_dataset(
         raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
     if dataset_attr.load_from == "ms_hub":
-        require_version("modelscope>=1.11.0", "To fix: pip install modelscope>=1.11.0")
+        check_version("modelscope>=1.11.0", mandatory=True)
         from modelscope import MsDataset  # type: ignore
         from modelscope.utils.config_ds import MS_DATASETS_CACHE  # type: ignore
 
@@ -140,7 +137,7 @@ def _load_single_dataset(
             dataset = dataset.to_hf_dataset()
 
     elif dataset_attr.load_from == "om_hub":
-        require_version("openmind>=0.8.0", "To fix: pip install openmind>=0.8.0")
+        check_version("openmind>=0.8.0", mandatory=True)
         from openmind import OmDataset  # type: ignore
         from openmind.utils.hub import OM_DATASETS_CACHE  # type: ignore
 
@@ -155,6 +152,8 @@ def _load_single_dataset(
             token=model_args.om_hub_token,
             streaming=data_args.streaming,
         )
+    elif dataset_attr.load_from == "cloud_file":
+        dataset = Dataset.from_list(read_cloud_json(data_path), split=dataset_attr.split)
     else:
         dataset = load_dataset(
             path=data_path,
@@ -164,10 +163,12 @@ def _load_single_dataset(
             split=dataset_attr.split,
             cache_dir=model_args.cache_dir,
             token=model_args.hf_hub_token,
-            streaming=data_args.streaming,
             num_proc=data_args.preprocessing_num_workers,
             trust_remote_code=model_args.trust_remote_code,
+            streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
+        if data_args.streaming and dataset_attr.load_from == "file":
+            dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
 
     # samplse dataset
     if dataset_attr.samples_ratio is not None and not data_args.streaming:
@@ -194,15 +195,12 @@ def _get_preprocessed_dataset(
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
     stage: Literal["pretrain", "conversation", "instruction"],
-    formatting: Literal["alpaca", "sharegpt", "document", "audio", "audio_arrow_asr", "audio_arrow_tts"],
-    template: "Template",
+    template: "TemplateFeb",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
     is_eval: bool = False,
 ) -> Optional[Union["Dataset", "IterableDataset"]]:
-    r"""
-    Preprocesses the dataset, including format checking and tokenization.
-    """
+    r"""Preprocesses the dataset, including format checking and tokenization."""
     if dataset is None:
         return None
 
@@ -221,6 +219,7 @@ def _get_preprocessed_dataset(
     dataset = dataset.map(
         preprocess_func,
         batched=True,
+        batch_size=data_args.preprocessing_batch_size,
         remove_columns=column_names,
         **kwargs,
     )
@@ -239,45 +238,32 @@ def _get_preprocessed_dataset(
 
 
 def get_dataset(
-    template: "Template",
+    template: "TemplateFeb",
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
 ) -> "DatasetModule":
-    r"""
-    Gets the train dataset and optionally gets the evaluation dataset.
-    """
-    # Load tokenized dataset
+    r"""Get the train dataset and optionally gets the evaluation dataset."""
+    # Load tokenized dataset if path exists
     if data_args.tokenized_path is not None:
         if isinstance(data_args.tokenized_path, str):
             if has_tokenized_data(data_args.tokenized_path):
                 logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
-                tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(data_args.tokenized_path)
-                logger.info_rank0(f"Loaded tokenized dataset from {data_args.tokenized_path}.")
-
-                dataset_module: Dict[str, "Dataset"] = {}
-                if isinstance(tokenized_data, DatasetDict):
-                    if "train" in tokenized_data:
-                        dataset_module["train_dataset"] = tokenized_data["train"]
-
-                    if "validation" in tokenized_data:
-                        dataset_module["eval_dataset"] = tokenized_data["validation"]
-
-                else:  # Dataset
-                    dataset_module["train_dataset"] = tokenized_data
-
+                tokenized_data = load_from_disk(data_args.tokenized_path)
+                dataset_module = get_dataset_module(tokenized_data)
                 if data_args.streaming:
-                    dataset_module = {k: v.to_iterable_dataset() for k, v in dataset_module.items()}
+                    dataset_module["train_dataset"] = dataset_module["train_dataset"].to_iterable_dataset()
 
+                logger.info_rank0(f"Loaded tokenized dataset from {data_args.tokenized_path}.")
                 return dataset_module
         elif isinstance(data_args.tokenized_path, list):
             train_dataset_list = []
             for tokenizer_dir in data_args.tokenized_path:
                 if has_tokenized_data(tokenizer_dir):
                     logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
-                    tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(tokenizer_dir)
+                    tokenized_data = load_from_disk(tokenizer_dir)
                     logger.info_rank0(f"Loaded tokenized dataset from {tokenizer_dir}.")
 
                     if isinstance(tokenized_data, DatasetDict):
@@ -289,10 +275,10 @@ def get_dataset(
 
             train_dataset = merge_dataset(train_dataset_list, data_args, seed=training_args.seed)
             train_dataset = train_dataset.shuffle(seed=training_args.seed)
-            dataset_module: Dict[str, "Dataset"] = {}
+            dataset_module = {}
             dataset_module["train_dataset"] = train_dataset
             if data_args.streaming:
-                dataset_module = {k: v.to_iterable_dataset() for k, v in dataset_module.items()}
+                dataset_module["train_dataset"] = dataset_module["train_dataset"].to_iterable_dataset()
             return dataset_module
         else:
             raise ValueError("not support other type tokenized_path.")
@@ -303,9 +289,7 @@ def get_dataset(
     # Load and preprocess dataset
     dataset_list = []
     for dataset_attr in get_dataset_list(data_args.dataset, data_args.dataset_dir):
-        with training_args.main_process_first(
-            desc=f"load dataset: {dataset_attr.dataset_name}"
-        ):
+        with training_args.main_process_first(desc=f"load dataset: {dataset_attr.dataset_name}"):
             if (dataset_attr.stage == "rm" and dataset_attr.ranking is False) or (
                 dataset_attr.stage != "rm" and dataset_attr.ranking is True
             ):
@@ -316,15 +300,12 @@ def get_dataset(
                 dataset_attr, model_args, data_args, training_args
             )
 
-        with training_args.main_process_first(
-            desc=f"pre-process dataset: {dataset_attr.dataset_name}"
-        ):
+        with training_args.main_process_first(desc=f"pre-process dataset: {dataset_attr.dataset_name}"):
             sub_dataset = _get_preprocessed_dataset(
                 sub_dataset,
                 data_args,
                 training_args,
                 dataset_attr.stage,
-                dataset_attr.formatting,
                 template,
                 tokenizer,
                 processor,
@@ -347,13 +328,9 @@ def get_dataset(
 
     if data_args.tokenized_path is not None:
         dataset_dict.save_to_disk(data_args.tokenized_path)
-        logger.info_rank0(f"Tokenized dataset saved at {data_args.tokenized_path}.")
-        logger.info_rank0(f"Please restart the training with `tokenized_path: {data_args.tokenized_path}`.")
+        logger.info_rank0(f"Tokenized dataset is saved at {data_args.tokenized_path}.")
+        logger.info_rank0(f"Please launch the training with `tokenized_path: {data_args.tokenized_path}`.")
 
         sys.exit(0)
 
-    dataset_module = {}
-    if "train" in dataset_dict:
-        dataset_module["train_dataset"] = dataset_dict["train"]
-
-    return dataset_module
+    return get_dataset_module(dataset_dict)

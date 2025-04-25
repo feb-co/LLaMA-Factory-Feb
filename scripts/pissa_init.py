@@ -1,4 +1,4 @@
-# Copyright 2024 HuggingFace Inc. and the LlamaFactory team.
+# Copyright 2025 HuggingFace Inc. and the LlamaFactory team.
 #
 # This code is based on the HuggingFace's PEFT library.
 # https://github.com/huggingface/peft/blob/v0.11.0/examples/pissa_finetuning/preprocess.py
@@ -37,8 +37,8 @@ def quantize_pissa(
     lora_target: tuple = ("q_proj", "v_proj"),
     save_safetensors: bool = True,
 ):
-    r"""
-    Initializes LoRA weights with Principal Singular values and Singular vectors Adaptation (PiSSA)
+    r"""Initialize LoRA weights with Principal Singular values and Singular vectors Adaptation (PiSSA).
+
     Usage: python pissa_init.py --model_name_or_path path_to_model --output_dir output_dir
     """
     if isinstance(lora_target, str):
@@ -67,7 +67,7 @@ def quantize_pissa(
     print(f"Adapter weights saved in {pissa_dir}")
 
     # Save base model
-    base_model: "PreTrainedModel" = peft_model.unload()
+    base_model: PreTrainedModel = peft_model.unload()
     base_model.save_pretrained(output_dir, safe_serialization=save_safetensors)
     tokenizer.save_pretrained(output_dir)
     print(f"Model weights saved in {output_dir}")

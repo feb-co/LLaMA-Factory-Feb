@@ -1,4 +1,4 @@
-# Copyright 2024 Microsoft Corporation and the LlamaFactory team.
+# Copyright 2025 Microsoft Corporation and the LlamaFactory team.
 #
 # This code is inspired by the Microsoft's DeepSpeed library.
 # https://www.deepspeed.ai/tutorials/flops-profiler/
@@ -29,8 +29,8 @@ def calculate_flops(
     seq_length: int = 512,
     flash_attn: str = "auto",
 ):
-    r"""
-    Calculates the flops of pre-trained models.
+    r"""Calculate the flops of pre-trained models.
+
     Usage: python cal_flops.py --model_name_or_path path_to_model --batch_size 1 --seq_length 512
     """
     with get_accelerator().device(0):

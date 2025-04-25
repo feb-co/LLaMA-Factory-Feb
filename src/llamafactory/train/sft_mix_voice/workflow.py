@@ -4,7 +4,7 @@
 # Licheng Wang (FEB team)
 #
 # The MIT License (MIT)
-# Copyright (c) 2024 Licheng Wang (FEB team)
+# Copyright (c) 2025 Licheng Wang (FEB team)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software
 # and associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -22,13 +22,13 @@
 #
 
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset
 from ...data.template_feb import get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
 from ...extras.logging import get_logger
-from ...extras.misc import calculate_tps, get_logits_processor
+from ...extras.misc import calculate_tps
 from ...extras.ploting import plot_loss
 from ...model import load_model_feb, load_tokenizer_feb
 from ..trainer_utils import create_modelcard_and_push
@@ -51,11 +51,11 @@ def run_sft_mix_voice(
     training_args: "Seq2SeqTrainingArguments",
     finetuning_args: "FinetuningArguments",
     generating_args: "GeneratingArguments",
-    callbacks: Optional[List["TrainerCallback"]] = None,
+    callbacks: Optional[list["TrainerCallback"]] = None,
 ):
     tokenizer_module = load_tokenizer_feb(model_args)
     tokenizer = tokenizer_module["tokenizer"]
-    template = get_template_and_fix_tokenizer(tokenizer, data_args, is_avater_tokenizer=True)
+    template = get_template_and_fix_tokenizer(tokenizer, data_args)
     dataset_module = get_feb_dataset(template, model_args, data_args, training_args, **tokenizer_module)
     model = load_model_feb(tokenizer, model_args, finetuning_args, training_args.do_train)
 
@@ -73,11 +73,6 @@ def run_sft_mix_voice(
         **tokenizer_module,
     )
 
-    # Override the decoding parameters of Seq2SeqTrainer
-    training_args.generation_max_length = training_args.generation_max_length or data_args.cutoff_len
-    training_args.generation_num_beams = data_args.eval_num_beams or training_args.generation_num_beams
-    training_args.remove_unused_columns = False  # important for multimodal dataset
-
     # Metric utils
     metric_module = {}
     if training_args.predict_with_generate:
@@ -86,6 +81,11 @@ def run_sft_mix_voice(
         metric_module["compute_metrics"] = ComputeAccuracy()
         metric_module["preprocess_logits_for_metrics"] = eval_logit_processor
 
+    # Keyword arguments for `model.generate`
+    gen_kwargs = generating_args.to_dict(obey_generation_config=True)
+    gen_kwargs["eos_token_id"] = [tokenizer.eos_token_id] + tokenizer.additional_special_tokens_ids
+    gen_kwargs["pad_token_id"] = tokenizer.pad_token_id
+
     # Initialize our Trainer
     trainer = CustomSeq2SeqTrainer(
         model=model,
@@ -93,17 +93,11 @@ def run_sft_mix_voice(
         finetuning_args=finetuning_args,
         data_collator=data_collator,
         callbacks=callbacks,
+        gen_kwargs=gen_kwargs,
         **dataset_module,
         **tokenizer_module,
         **metric_module,
     )
-
-    # Keyword arguments for `model.generate`
-    gen_kwargs = generating_args.to_dict()
-    gen_kwargs["eos_token_id"] = [tokenizer.text_tokenizer.eos_token_id]
-    if hasattr(tokenizer, "audio_special_token"):
-        gen_kwargs["eoa_token_id"] = [tokenizer.audio_special_token["eoa_token"]]
-    gen_kwargs["logits_processor"] = get_logits_processor()
 
     # Training
     if training_args.do_train:
@@ -118,7 +112,15 @@ def run_sft_mix_voice(
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
         if trainer.is_world_process_zero() and finetuning_args.plot_loss:
-            plot_loss(training_args.output_dir, keys=["loss", "eval_loss", "eval_accuracy"])
+            keys = ["loss"]
+            if isinstance(dataset_module.get("eval_dataset"), dict):
+                keys += sum(
+                    [[f"eval_{key}_loss", f"eval_{key}_accuracy"] for key in dataset_module["eval_dataset"].keys()], []
+                )
+            else:
+                keys += ["eval_loss", "eval_accuracy"]
+
+            plot_loss(training_args.output_dir, keys=keys)
 
     if training_args.predict_with_generate:
         tokenizer.padding_side = "left"  # use left-padding in generation
@@ -126,20 +128,16 @@ def run_sft_mix_voice(
     # Evaluation
     if training_args.do_eval:
         metrics = trainer.evaluate(metric_key_prefix="eval", **gen_kwargs)
-        if training_args.predict_with_generate:  # eval_loss will be wrong if predict_with_generate is enabled
-            metrics.pop("eval_loss", None)
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
     # Predict
     if training_args.do_predict:
-        logger.warning_once("Batch generation can be very slow. Consider using `scripts/vllm_infer.py` instead.")
+        logger.warning_rank0_once("Batch generation can be very slow. Consider using `scripts/vllm_infer.py` instead.")
         predict_results = trainer.predict(dataset_module["eval_dataset"], metric_key_prefix="predict", **gen_kwargs)
-        if training_args.predict_with_generate:  # predict_loss will be wrong if predict_with_generate is enabled
-            predict_results.metrics.pop("predict_loss", None)
         trainer.log_metrics("predict", predict_results.metrics)
         trainer.save_metrics("predict", predict_results.metrics)
-        trainer.save_predictions(dataset_module["eval_dataset"], predict_results, gen_kwargs)
+        trainer.save_predictions(dataset_module["eval_dataset"], predict_results, generating_args.skip_special_tokens)
 
     # Create model card
     create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)

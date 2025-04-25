@@ -1,5 +1,5 @@
 #
-# Created on Sat Jan 01 2025
+# Created on Sat Apri 25 2025
 #
 # Licheng Wang (FEB team)
 #
@@ -21,36 +21,63 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Any
+from dataclasses import dataclass
 
 from ...data import MultiModalDataCollatorForSeq2Seq, get_feb_dataset
 from ...data.template_feb import get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
-from ...extras.logging import get_logger
 from ...extras.misc import calculate_tps
 from ...extras.ploting import plot_loss
+from ...hparams import ModelArguments
 from ...model import load_model_feb, load_tokenizer_feb
-from ..trainer_utils import create_modelcard_and_push
-from .metric import ComputeAccuracy, ComputeSimilarity, eval_logit_processor
-from .trainer import CustomSeq2SeqTrainer
+from ..trainer_utils import create_modelcard_and_push, create_ref_model
+from .trainer import CustomDPOTrainer
 
 
 if TYPE_CHECKING:
     from transformers import Seq2SeqTrainingArguments, TrainerCallback
 
-    from ...hparams import DataArguments, FinetuningArguments, GeneratingArguments, ModelArguments
+    from ...hparams import DataArguments, FinetuningArguments
 
 
-logger = get_logger(__name__)
+
+@dataclass
+class AudioPairwiseDataCollatorWithPadding(MultiModalDataCollatorForSeq2Seq):
+    r"""Data collator for pairwise data."""
+
+    def __call__(self, features: list[dict[str, Any]]):
+        r"""Pad batched data to the longest sequence in the batch.
+
+        We generate 2 * n examples where the first n examples represent chosen examples and
+        the last n examples represent rejected examples.
+        """
+        concatenated_features = []
+        for key in ("chosen", "rejected"):
+            for feature in features:
+                target_feature = {
+                    "input_ids": feature[f"{key}_input_ids"],
+                    "attention_mask": feature[f"{key}_attention_mask"],
+                    "valid_tokens_pos": feature[f"{key}_valid_tokens_pos"],
+                    "decoder_input_ids": feature[f"{key}_decoder_input_ids"],
+                    "decoder_attention_mask": feature[f"{key}_decoder_attention_mask"],
+                    "encoder_decoder_attention_mask": feature[f"{key}_encoder_decoder_attention_mask"],
+                    "decoder_labels": feature[f"{key}_decoder_labels"],
+                    "images": feature["images"],
+                    "videos": feature["videos"],
+                    "audios": feature["audios"],
+                }
+                concatenated_features.append(target_feature)
+
+        return super().__call__(concatenated_features)
 
 
-def run_sft_mix_voice(
+
+def run_dpo_voice(
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
     finetuning_args: "FinetuningArguments",
-    generating_args: "GeneratingArguments",
     callbacks: Optional[list["TrainerCallback"]] = None,
 ):
     tokenizer_module = load_tokenizer_feb(model_args)
@@ -59,44 +86,32 @@ def run_sft_mix_voice(
     dataset_module = get_feb_dataset(template, model_args, data_args, training_args, **tokenizer_module)
     model = load_model_feb(tokenizer, model_args, finetuning_args, training_args.do_train)
 
-    if getattr(model, "is_quantized", False) and not training_args.do_train:
-        setattr(model, "_hf_peft_config_loaded", True)  # hack here: make model compatible with prediction
-
-    data_collator = SFTDataCollatorWith4DAttentionMask(
+    data_collator = AudioPairwiseDataCollatorWithPadding(
         template=template,
-        model=model if not training_args.predict_with_generate else None,
-        pad_to_multiple_of=8 if training_args.do_train else None,  # for shift short attention
+        pad_to_multiple_of=8,
         label_pad_token_id=IGNORE_INDEX if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id,
-        block_diag_attn=model_args.block_diag_attn,
-        attn_implementation=getattr(model.config, "_attn_implementation", None),
-        compute_dtype=model_args.compute_dtype,
         **tokenizer_module,
     )
 
-    # Metric utils
-    metric_module = {}
-    if training_args.predict_with_generate:
-        metric_module["compute_metrics"] = ComputeSimilarity(tokenizer=tokenizer)
-    elif finetuning_args.compute_accuracy:
-        metric_module["compute_metrics"] = ComputeAccuracy()
-        metric_module["preprocess_logits_for_metrics"] = eval_logit_processor
-
-    # Keyword arguments for `model.generate`
-    gen_kwargs = generating_args.to_dict(obey_generation_config=True)
-    gen_kwargs["eos_token_id"] = [tokenizer.eos_token_id] + tokenizer.additional_special_tokens_ids
-    gen_kwargs["pad_token_id"] = tokenizer.pad_token_id
+    # Create reference model
+    if finetuning_args.use_ref_model:
+        if finetuning_args.ref_model is None and (not training_args.do_train):  # use the model itself
+            ref_model = model
+        else:
+            ref_model = create_ref_model(model_args, finetuning_args)
+    else:
+        ref_model = None
 
     # Initialize our Trainer
-    trainer = CustomSeq2SeqTrainer(
+    trainer = CustomDPOTrainer(
         model=model,
+        ref_model=ref_model,
         args=training_args,
         finetuning_args=finetuning_args,
         data_collator=data_collator,
         callbacks=callbacks,
-        gen_kwargs=gen_kwargs,
         **dataset_module,
         **tokenizer_module,
-        **metric_module,
     )
 
     # Training
@@ -105,39 +120,30 @@ def run_sft_mix_voice(
         trainer.save_model()
         if finetuning_args.include_effective_tokens_per_second:
             train_result.metrics["effective_tokens_per_sec"] = calculate_tps(
-                dataset_module["train_dataset"], train_result.metrics, stage="sft"
+                dataset_module["train_dataset"], train_result.metrics, stage="rm"
             )
 
         trainer.log_metrics("train", train_result.metrics)
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
         if trainer.is_world_process_zero() and finetuning_args.plot_loss:
-            keys = ["loss"]
+            keys = ["loss", "rewards/accuracies"]
             if isinstance(dataset_module.get("eval_dataset"), dict):
-                keys += sum(
-                    [[f"eval_{key}_loss", f"eval_{key}_accuracy"] for key in dataset_module["eval_dataset"].keys()], []
-                )
+                keys += [f"eval_{key}_loss" for key in dataset_module["eval_dataset"].keys()]
             else:
-                keys += ["eval_loss", "eval_accuracy"]
+                keys += ["eval_loss"]
 
             plot_loss(training_args.output_dir, keys=keys)
 
-    if training_args.predict_with_generate:
-        tokenizer.padding_side = "left"  # use left-padding in generation
-
     # Evaluation
     if training_args.do_eval:
-        metrics = trainer.evaluate(metric_key_prefix="eval", **gen_kwargs)
+        metrics = trainer.evaluate(metric_key_prefix="eval")
+        if id(model) == id(ref_model):  # unable to compute rewards if reference model is the model itself
+            remove_keys = [key for key in metrics.keys() if "rewards" in key]
+            for key in remove_keys:
+                metrics.pop(key)
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-
-    # Predict
-    if training_args.do_predict:
-        logger.warning_rank0_once("Batch generation can be very slow. Consider using `scripts/vllm_infer.py` instead.")
-        predict_results = trainer.predict(dataset_module["eval_dataset"], metric_key_prefix="predict", **gen_kwargs)
-        trainer.log_metrics("predict", predict_results.metrics)
-        trainer.save_metrics("predict", predict_results.metrics)
-        trainer.save_predictions(dataset_module["eval_dataset"], predict_results, generating_args.skip_special_tokens)
 
     # Create model card
     create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)

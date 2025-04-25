@@ -25,6 +25,10 @@ from functools import partial
 from typing import TYPE_CHECKING, Callable, Literal, Optional, Tuple
 
 
+from .pairwise import (
+    TextPairwiseDatasetProcessor,
+    AudioPairwiseDatasetProcessor,
+)
 from .process_text import (
     preprocess_packed_conversation_dataset,
     preprocess_conversation_dataset,
@@ -32,8 +36,6 @@ from .process_text import (
     preprocess_instruction_dataset,
     preprocess_pretrain_dataset,
     print_pretrain_dataset_example,
-    preprocess_pairwise_dataset,
-    print_pairwise_dataset_example,
 )
 from .process_audio import (
     preprocess_avater_audio_dataset,
@@ -51,22 +53,17 @@ if TYPE_CHECKING:
 
 
 
-def get_preprocess_and_print_func(
+def get_dataset_processor(
     data_args: "DataArguments",
-    stage: Literal["dpo", "pretrain", "conversation", "instruction", "avater_audio"],
+    stage: Literal["dpo", "dpo_audio", "pretrain", "conversation", "instruction", "avater_audio"],
     template: "TemplateFeb",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"],
 ) -> Tuple[Callable, Callable]:
     if stage == "dpo":
-        preprocess_func = partial(
-            preprocess_pairwise_dataset,
-            template=template,
-            tokenizer=tokenizer,
-            processor=processor,
-            data_args=data_args,
-        )
-        print_function = partial(print_pairwise_dataset_example, tokenizer=tokenizer)
+        dataset_processor_class = TextPairwiseDatasetProcessor
+    elif stage == "dpo_audio":
+        dataset_processor_class = AudioPairwiseDatasetProcessor
     elif stage == "conversation":
         if data_args.packing:
             preprocess_func = partial(
@@ -130,4 +127,4 @@ def get_preprocess_and_print_func(
     else:
         raise NotImplementedError
 
-    return preprocess_func, print_function
+    return dataset_processor_class(template=template, tokenizer=tokenizer, processor=processor, data_args=data_args)

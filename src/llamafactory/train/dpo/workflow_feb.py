@@ -23,8 +23,10 @@
 
 from typing import TYPE_CHECKING, Optional
 
-from ...data import PairwiseDataCollatorWithPadding, get_feb_dataset, get_template_and_fix_tokenizer
+from ...data import PairwiseDataCollatorWithPadding, get_feb_dataset
+from ...data.template_feb import get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
+from ...extras.misc import calculate_tps
 from ...extras.ploting import plot_loss
 from ...hparams import ModelArguments
 from ...model import load_model_feb, load_tokenizer_feb

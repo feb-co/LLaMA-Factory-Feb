@@ -21,17 +21,13 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-
-import copy
-import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 
 from ...extras import logging
 from ...extras.constants import IGNORE_INDEX
-from ..data_utils import Role
-from .processor_utils import packing_conversation
+from .processor_utils import AudioExample, packing_conversation, process_audio_messages
 
 
 if TYPE_CHECKING:
@@ -68,93 +64,23 @@ def _encode_avater_audio_example(
 
     messages = prompt + response
 
-    text_input_ids, text_labels  = [], []
-    audio_features, audio_positions = [], []
-    valid_tokens_pos, audio_codes_ids, audio_codes_labels = [], [], []
-    t2a_attention_mask = []
-
     prefix_ids = template.encode_system(tokenizer=tokenizer, system=system, tools=tools)
 
-    retry_time = 0
-    while retry_time < 10:
-        try:
-            encoded_pairs = template.encode_avater_audio(tokenizer=tokenizer, messages=messages)
-            break
-        except Exception as e:
-            retry_time += 1
-            if retry_time >= 10:
-                logger.warning_rank0(e)
-                return None
-
-    text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
-    audio_start_pos = 0
-    for turn_idx, (source_dict, target_dict) in enumerate(encoded_pairs):
-        # text
-        source_token_ids = source_dict["token_ids"]
-        target_token_ids = target_dict["token_ids"]
-
-        source_text_len = len(source_token_ids)
-        target_text_len = len(target_token_ids)
-
-        source_text_label = [IGNORE_INDEX] * source_text_len
-
-        if mask_history and turn_idx != len(encoded_pairs) - 1:
-            target_text_label = [IGNORE_INDEX] * target_text_len
-        elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
-            target_text_label = [IGNORE_INDEX] * target_text_len
-        else:
-            target_text_label = target_token_ids[:]
-
-        # audio input
-        if "audio_features" in source_dict:
-            audio_features += source_dict["audio_features"]
-            audio_positions += [[audio_start_pos+audio_start, audio_length] for audio_start, audio_length in source_dict["audio_positions"]]
-
-        # audio output
-        if turn_idx == len(encoded_pairs) - 1 and "audio_codes" in target_dict:
-            if template.name == "llama3":
-                start_prefix_idx = 3
-            else:
-                start_prefix_idx = 0
-
-            try:
-                t2a_attention_mask = tokenizer.convert_t2a_attention_mask(len(target_token_ids[start_prefix_idx:]), len(target_dict["audio_codes"][0]))
-            except Exception as e:
-                logger.warning_rank0(e)
-                return None
-
-            valid_tokens_pos = [idx for idx in range(
-                len(text_labels)+source_text_len+start_prefix_idx, len(text_labels)+source_text_len+len(target_token_ids)
-            )]
-            audio_codes_ids = target_dict["audio_codes"]
-            audio_codes_labels = copy.deepcopy(target_dict["audio_codes"])
-
-        text_input_ids += source_token_ids + target_token_ids
-        text_labels += source_text_label + target_text_label
-        audio_start_pos += len(text_input_ids)
-
-    assert len(text_input_ids) == len(text_labels), "The length of text_input_ids should equal with labels' length!"
-    assert len(audio_codes_ids) == len(audio_codes_labels), "The length of audio_codes_ids should equal with labels' length!"
-
-    right = (
-        len(t2a_attention_mask) == len(audio_codes_ids[0])
-        and len(t2a_attention_mask[0]) == len(valid_tokens_pos)
-        and len(audio_codes_ids) == len(audio_codes_labels)
-        and len(audio_codes_ids[0]) == len(audio_codes_labels[0])
+    audio_example: AudioExample = process_audio_messages(
+        messages=messages,
+        template=template,
+        tokenizer=tokenizer,
+        mask_history=mask_history
     )
-    if not right:
+    
+    if audio_example is None:
         return None
 
-    return {
-        "prefix_ids": prefix_ids,
-        "text_input_ids": text_input_ids, "text_labels": text_labels,
-        "audio_features": audio_features, "audio_positions": audio_positions,
-        "audio_codes_ids": audio_codes_ids, "audio_codes_labels": audio_codes_labels,
-        "valid_tokens_pos": valid_tokens_pos, "t2a_attention_mask": t2a_attention_mask,
-    }
+    audio_example["prefix_ids"] = prefix_ids
+    return audio_example
 
 
-def _prepare_model_inputs(cutoff_len: int, pad_token_id: int, enocde_outputs: dict, model_inputs: dict):
+def _prepare_model_inputs(cutoff_len: int, pad_token_id: int, enocde_outputs: AudioExample, model_inputs: dict):
     input_ids = enocde_outputs["prefix_ids"] + enocde_outputs["text_input_ids"]
     text_labels = [IGNORE_INDEX] * len(enocde_outputs["prefix_ids"]) + enocde_outputs["text_labels"]
     valid_tokens_pos = [pos+len(enocde_outputs["prefix_ids"]) for pos in enocde_outputs["valid_tokens_pos"]]
@@ -180,9 +106,9 @@ def _prepare_model_inputs(cutoff_len: int, pad_token_id: int, enocde_outputs: di
 
     # tts adapter
     model_inputs["valid_tokens_pos"].append(valid_tokens_pos if valid_tokens_pos else None)
-    model_inputs["encoder_decoder_attention_mask"].append(enocde_outputs["t2a_attention_mask"] if enocde_outputs["t2a_attention_mask"] else None)
     model_inputs["decoder_input_ids"].append(enocde_outputs["audio_codes_ids"] if enocde_outputs["audio_codes_ids"] else None)
     model_inputs["decoder_attention_mask"].append(([1] * len(enocde_outputs["audio_codes_ids"][0])) if enocde_outputs["audio_codes_ids"] else None)
+    model_inputs["encoder_decoder_attention_mask"].append(enocde_outputs["t2a_attention_mask"] if enocde_outputs["t2a_attention_mask"] else None)
     model_inputs["decoder_labels"].append(enocde_outputs["audio_codes_labels"] if enocde_outputs["audio_codes_labels"] else None)
 
     return model_inputs
@@ -246,7 +172,7 @@ def preprocess_avater_audio_dataset(
             )
             continue
 
-        enocde_outputs: dict = _encode_avater_audio_example(
+        enocde_outputs: AudioExample = _encode_avater_audio_example(
             prompt=examples["_prompt"][i],
             response=examples["_response"][i],
             system=examples["_system"][i],
@@ -283,7 +209,7 @@ def preprocess_packed_avater_audio_dataset(
             )
             continue
 
-        enocde_outputs: dict = _encode_avater_audio_example(
+        enocde_outputs: AudioExample = _encode_avater_audio_example(
             prompt=examples["_prompt"][i],
             response=examples["_response"][i],
             system=examples["_system"][i],

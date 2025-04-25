@@ -41,7 +41,7 @@ class DatasetAttr:
     load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file", "arrow"]
     dataset_name: str
     dataset_key: str = None
-    stage: Literal["dpo", "pretrain", "conversation", "instruction", "avater_audio"] = "conversation"
+    stage: Literal["dpo", "dpo_audio", "pretrain", "conversation", "instruction", "avater_audio"] = "conversation"
     formatting: Literal["alpaca", "sharegpt", "document", "longthought", "audio", "audio_arrow_asr", "audio_arrow_tts"] = "sharegpt"
     ranking: bool = False
 

@@ -732,7 +732,7 @@ def convert_tts_dialogue(
                         "array": resample_audio_array(
                             audio["array"],
                             audio["sample_rate"],
-                            target_sr=24000
+                            target_sr=TARGET_SAMPLE_RATE
                         ),
                         "split": audio["split"],
                     }
@@ -806,7 +806,7 @@ def convert_tts_packed_dialogue(
                         "array": resample_audio_array(
                             audio["array"],
                             audio["sample_rate"],
-                            target_sr=24000
+                            target_sr=TARGET_SAMPLE_RATE
                         ),
                         "split": audio["split"],
                     }

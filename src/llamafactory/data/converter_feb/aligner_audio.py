@@ -23,7 +23,6 @@
 
 
 import json
-import random
 import soundfile as sf
 from typing import TYPE_CHECKING, Any, Dict
 
@@ -152,14 +151,3 @@ def convert_avater_audio(
         "_videos": None,
     }
     return output
-
-
-def convert_avater_audio_arrow(
-    example: Dict[str, Any],
-    dataset_attr: "DatasetAttr",
-    data_args: "DataArguments",
-) -> Dict[str, Any]:
-    if "LargeScaleASR" in dataset_attr.dataset_name:
-        return convert_LargeScaleASR(example, dataset_attr, data_args)
-    else:
-        raise NotImplementedError

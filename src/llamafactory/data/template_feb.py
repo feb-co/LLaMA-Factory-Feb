@@ -209,7 +209,7 @@ class TemplateFeb:
 
         return list(stop_token_ids)
 
-    def _convert_txt_elements_to_ids(self, tokenizer: "PreTrainedTokenizer", elements: "SLOTS") -> List[int]:
+    def _convert_txt_elements_to_ids(self, tokenizer: "PreTrainedTokenizer", elements: "SLOTS") -> list[int]:
         r"""Convert elements to token ids."""
         bos_token_id = tokenizer.bos_token_id if getattr(tokenizer, "bos_token_id", None) else tokenizer.text_tokenizer.bos_token_id
         eos_token_id = tokenizer.eos_token_id if getattr(tokenizer, "eos_token_id", None) else tokenizer.text_tokenizer.eos_token_id

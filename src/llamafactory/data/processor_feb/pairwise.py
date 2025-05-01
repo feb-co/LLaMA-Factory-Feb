@@ -39,9 +39,6 @@ logger = logging.get_logger(__name__)
 
 
 class TextPairwiseDatasetProcessor(DatasetProcessor):
-    """
-    Text DPO 
-    """
     def _encode_data_example(
         self,
         prompt: Sequence[Dict[str, str]],
@@ -153,9 +150,6 @@ class TextPairwiseDatasetProcessor(DatasetProcessor):
 
 
 class AudioPairwiseDatasetProcessor(DatasetProcessor):
-    """
-    Audio DPO 
-    """
     def _encode_data_example(
         self,
         prompt: Sequence[Dict[str, str]],

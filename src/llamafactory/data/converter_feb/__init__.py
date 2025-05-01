@@ -26,7 +26,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Union
 
 from .aligner_text import convert_alpaca, convert_document, convert_sharegpt, convert_longthought
-from .aligner_audio import convert_avater_audio, convert_avater_audio_arrow
+from .aligner_audio import convert_avater_audio
 from .aligner_audio_arrow_tts import convert_avater_audio_arrow_tts
 from ...extras import logging
 
@@ -71,7 +71,9 @@ def align_dataset(
     elif dataset_attr.formatting == "audio_arrow_tts":
         convert_func = partial(convert_avater_audio_arrow_tts, dataset_attr=dataset_attr, data_args=data_args)
     elif dataset_attr.formatting == "audio_arrow_asr":
-        convert_func = partial(convert_avater_audio_arrow, dataset_attr=dataset_attr, data_args=data_args)
+        # convert_func = partial(convert_avater_audio_arrow, dataset_attr=dataset_attr, data_args=data_args)
+        # TODO
+        raise NotImplementedError
     else:
         convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, data_args=data_args)
 

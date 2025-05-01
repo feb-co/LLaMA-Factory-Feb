@@ -29,13 +29,11 @@ from .pairwise import (
     TextPairwiseDatasetProcessor,
     AudioPairwiseDatasetProcessor,
 )
-from .process_text import (
-    preprocess_packed_conversation_dataset,
-    preprocess_conversation_dataset,
-    print_conversation_dataset_example,
-    preprocess_instruction_dataset,
-    preprocess_pretrain_dataset,
-    print_pretrain_dataset_example,
+from .pretrain import PretrainDatasetProcessor
+from .supervised_text import (
+    ConversationDatasetProcessor,
+    PackedConversationDatasetProcessor,
+    InstructionDatasetProcessor
 )
 from .process_audio import (
     preprocess_avater_audio_dataset,
@@ -64,46 +62,15 @@ def get_dataset_processor(
         dataset_processor_class = TextPairwiseDatasetProcessor
     elif stage == "dpo_audio":
         dataset_processor_class = AudioPairwiseDatasetProcessor
+    elif stage == "pretrain":
+        dataset_processor_class = PretrainDatasetProcessor
     elif stage == "conversation":
         if data_args.packing:
-            preprocess_func = partial(
-                preprocess_packed_conversation_dataset,
-                template=template,
-                tokenizer=tokenizer,
-                data_args=data_args,
-            )
+            dataset_processor_class = PackedConversationDatasetProcessor
         else:
-            preprocess_func = partial(
-                preprocess_conversation_dataset,
-                template=template,
-                tokenizer=tokenizer,
-                processor=processor,
-                data_args=data_args,
-            )
-
-        print_function = partial(
-            print_conversation_dataset_example, tokenizer=tokenizer
-        )
-    elif stage == "pretrain":
-        preprocess_func = partial(
-            preprocess_pretrain_dataset,
-            tokenizer=tokenizer,
-            data_args=data_args,
-        )
-        print_function = partial(
-            print_pretrain_dataset_example, tokenizer=tokenizer
-        )
+            dataset_processor_class = ConversationDatasetProcessor
     elif stage == "instruction":
-        preprocess_func = partial(
-            preprocess_instruction_dataset,
-            template=template,
-            tokenizer=tokenizer,
-            processor=processor,
-            data_args=data_args,
-        )
-        print_function = partial(
-            print_conversation_dataset_example, tokenizer=tokenizer
-        )
+        dataset_processor_class = InstructionDatasetProcessor
     elif stage == "avater_audio":
         if data_args.packing:
             preprocess_func = partial(

@@ -182,7 +182,7 @@ def packing_conversation(numbers: list[int], capacity: int) -> list[list[int]]:
 
 def process_audio_messages(
     messages: list[dict[str]],
-    template: TemplateFeb,
+    template: "TemplateFeb",
     tokenizer: "PreTrainedTokenizer",
     mask_history: bool
 ) -> AudioExample:

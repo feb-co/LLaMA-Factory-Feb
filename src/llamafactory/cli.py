@@ -15,6 +15,7 @@
 import os
 import subprocess
 import sys
+import random
 from copy import deepcopy
 from functools import partial
 
@@ -75,42 +76,29 @@ def main():
 
     command = sys.argv.pop(1) if len(sys.argv) >= 1 else "help"
     if command == "train" and (is_env_enabled("FORCE_TORCHRUN") or (get_device_count() > 1 and not use_ray())):
-        # launch distributed training
-        nnodes = os.getenv("NNODES", "1")
-        node_rank = os.getenv("NODE_RANK", "0")
-        nproc_per_node = os.getenv("NPROC_PER_NODE", str(get_device_count()))
-        master_addr = os.getenv("MASTER_ADDR", "127.0.0.1")
-        master_port = os.getenv("MASTER_PORT", str(find_available_port()))
-        logger.info_rank0(f"Initializing {nproc_per_node} distributed tasks at: {master_addr}:{master_port}")
-        if int(nnodes) > 1:
-            print(f"Multi-node training enabled: num nodes: {nnodes}, node rank: {node_rank}")
-
-        env = deepcopy(os.environ)
-        if is_env_enabled("OPTIM_TORCH", "1"):
-            # optimize DDP, see https://zhuanlan.zhihu.com/p/671834539
-            env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-            env["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
-
-        # NOTE: DO NOT USE shell=True to avoid security risk
-        process = subprocess.run(
-            (
-                "torchrun --nnodes {nnodes} --node_rank {node_rank} --nproc_per_node {nproc_per_node} "
-                "--master_addr {master_addr} --master_port {master_port} {file_name} {args}"
+        force_torchrun = os.environ.get("FORCE_TORCHRUN", "0").lower() in ["true", "1"]
+        if force_torchrun or get_device_count() > 1:
+            master_addr = os.environ.get("MASTER_ADDR", "127.0.0.1")
+            master_port = os.environ.get("MASTER_PORT", str(random.randint(20001, 29999)))
+            logger.info("Initializing distributed tasks at: {}:{}".format(master_addr, master_port))
+            process = subprocess.run(
+                (
+                    "torchrun --nnodes {nnodes} --node_rank {node_rank} --nproc_per_node {nproc_per_node} "
+                    "--master_addr {master_addr} --master_port {master_port} {file_name} {args}"
+                ).format(
+                    nnodes=os.environ.get("NNODES", "1"),
+                    node_rank=os.environ.get("RANK", "0"),
+                    nproc_per_node=os.environ.get("NPROC_PER_NODE", str(get_device_count())),
+                    master_addr=master_addr,
+                    master_port=master_port,
+                    file_name=launcher.__file__,
+                    args=" ".join(sys.argv[1:]),
+                ),
+                shell=True,
             )
-            .format(
-                nnodes=nnodes,
-                node_rank=node_rank,
-                nproc_per_node=nproc_per_node,
-                master_addr=master_addr,
-                master_port=master_port,
-                file_name=launcher.__file__,
-                args=" ".join(sys.argv[1:]),
-            )
-            .split(),
-            env=env,
-            check=True,
-        )
-        sys.exit(process.returncode)
+            sys.exit(process.returncode)
+        else:
+            run_exp()
     elif command in COMMAND_MAP:
         COMMAND_MAP[command]()
     else:

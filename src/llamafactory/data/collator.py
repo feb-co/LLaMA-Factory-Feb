@@ -494,7 +494,7 @@ class PairwiseDataCollatorWithPadding(MultiModalDataCollatorForSeq2Seq):
                     "labels": feature[f"{key}_labels"],
                     "images": feature["images"],
                     "videos": feature["videos"],
-                    "audios": feature["audios"],
+                    "audios": feature.pop("audios", None),
                 }
                 concatenated_features.append(target_feature)
 

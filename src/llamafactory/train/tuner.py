@@ -20,13 +20,13 @@ import torch
 import torch.distributed as dist
 from transformers import EarlyStoppingCallback, PreTrainedModel
 
-from ..data import get_template_and_fix_tokenizer
+from ..data.template_feb import get_template_and_fix_tokenizer
 from ..extras import logging
 from ..extras.constants import V_HEAD_SAFE_WEIGHTS_NAME, V_HEAD_WEIGHTS_NAME
 from ..extras.misc import infer_optim_dtype
 from ..extras.packages import is_ray_available
 from ..hparams import get_infer_args, get_ray_args, get_train_args, read_args
-from ..model import load_model, load_tokenizer
+from ..model import load_model_feb, load_tokenizer_feb
 from .callbacks import LogCallback, PissaConvertCallback, ReporterCallback
 from .dpo import run_dpo
 from .dpo_voice import run_dpo_voice
@@ -128,11 +128,11 @@ def export_model(args: Optional[dict[str, Any]] = None) -> None:
     if model_args.adapter_name_or_path is not None and model_args.export_quantization_bit is not None:
         raise ValueError("Please merge adapters before quantizing the model.")
 
-    tokenizer_module = load_tokenizer(model_args)
+    tokenizer_module = load_tokenizer_feb(model_args)
     tokenizer = tokenizer_module["tokenizer"]
     processor = tokenizer_module["processor"]
     template = get_template_and_fix_tokenizer(tokenizer, data_args)
-    model = load_model(tokenizer, model_args, finetuning_args)  # must after fixing tokenizer to resize vocab
+    model = load_model_feb(tokenizer, model_args, finetuning_args)  # must after fixing tokenizer to resize vocab
 
     if getattr(model, "quantization_method", None) is not None and model_args.adapter_name_or_path is not None:
         raise ValueError("Cannot merge adapters to a quantized model.")

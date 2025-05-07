@@ -217,7 +217,7 @@ def load_model(
             trainable_params/(1e9), all_param/(1e9), 100 * trainable_params / all_param
         )
     else:
-        param_stats = "all params: {:.4f}B".format(all_param(1e9))
+        param_stats = "all params: {:.4f}B".format(all_param/(1e9))
 
     logger.info_rank0(param_stats)
 

@@ -43,6 +43,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+TARGET_SAMPLE_RATE = 24000
+
+
 def convert_avater_audio(
     example: Dict[str, Any],
     dataset_attr: "DatasetAttr",
@@ -116,14 +119,14 @@ def convert_avater_audio(
                     "array": resample_audio_array(
                         array,
                         sample_rate,
-                        target_sr=24000
+                        target_sr=TARGET_SAMPLE_RATE
                     ),
                     "split": item["split"]
                 })
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                    "content": message[dataset_attr.content_tag],
+                    "content": message[dataset_attr.content_tag].strip(),
                     "audios": audios
                 }
             )

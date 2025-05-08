@@ -94,6 +94,7 @@ def convert_LargeScaleASR(
         style = ""
 
     audio_text = random.choice([example["text"], example["text"].lower()])
+    audio_text = audio_text.strip()
 
     flag_list = [0, 1]
     flag = random.choice(flag_list)
@@ -171,6 +172,7 @@ def convert_packed_LargeScaleASR(
             style = ""
 
         audio_text = random.choice([examples["text"][i], examples["text"][i].lower()])
+        audio_text = audio_text.strip()
 
         if flag == 0:
             system += (random.choice(["\n", "\n\n", " "]) + style + random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
@@ -242,6 +244,7 @@ def convert_parler_tts(
         style = ""
 
     audio_text = random.choice([example["transcript"], example["transcript"].lower()])
+    audio_text = audio_text.strip()
 
     flag_list = [0, 1]
     flag = random.choice(flag_list)
@@ -320,6 +323,7 @@ def convert_packed_parler_tts(
             style = ""
 
         audio_text = random.choice([examples["transcript"][i], examples["transcript"][i].lower()])
+        audio_text = audio_text.strip()
 
         if flag == 0:
             system += (random.choice(["\n", "\n\n", " "]) + style + random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
@@ -392,6 +396,7 @@ def convert_tts_text(
         example_id = "0"
 
     audio_text = random.choice([example["text"], example["text"].lower()])
+    audio_text = audio_text.strip()
 
     flag_list = [0, 1]
     flag = random.choice(flag_list)
@@ -465,6 +470,7 @@ def convert_tts_packed_text(
         example_id = examples["id"][i]
 
         audio_text = random.choice([examples["text"][i], examples["text"][i].lower()])
+        audio_text = audio_text.strip()
 
         if flag == 0:
             system += (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
@@ -562,6 +568,8 @@ def convert_tts_segment(
                 }
             )
 
+    audio_text = random.choice([audio_text, audio_text.lower()])
+    audio_text = audio_text.strip()
     flag_list = [0, 1]
     flag = random.choice(flag_list)
     if flag == 0:
@@ -649,6 +657,8 @@ def convert_tts_packed_segment(
                     }
                 )
 
+        audio_text = random.choice([audio_text, audio_text.lower()])
+        audio_text = audio_text.strip()
         if flag == 0:
             system += (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
             user_prompt = audio_text
@@ -722,7 +732,7 @@ def convert_tts_dialogue(
                 messages.append(
                     {
                         "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                        "content": message[dataset_attr.content_tag],
+                        "content": message[dataset_attr.content_tag].strip(),
                     }
                 )
             elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag:
@@ -741,7 +751,7 @@ def convert_tts_dialogue(
                 outputs["_prompt"].append(copy.deepcopy(messages))
                 outputs["_response"].append([{
                     "role": Role.ASSISTANT_AUDIO.value,
-                    "content": message[dataset_attr.content_tag],
+                    "content": message[dataset_attr.content_tag].strip(),
                     "audios": audios
                 }])
                 outputs["_system"].append(system)
@@ -752,7 +762,7 @@ def convert_tts_dialogue(
                 messages.append(
                     {
                         "role": Role.ASSISTANT.value,
-                        "content": message[dataset_attr.content_tag],
+                        "content": message[dataset_attr.content_tag].strip(),
                     }
                 )
             else:
@@ -795,7 +805,7 @@ def convert_tts_packed_dialogue(
                 messages.append(
                     {
                         "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                        "content": message[dataset_attr.content_tag],
+                        "content": message[dataset_attr.content_tag].strip(),
                     }
                 )
                 current_seq_length += len(message[dataset_attr.content_tag].split())
@@ -816,7 +826,7 @@ def convert_tts_packed_dialogue(
                 outputs["_prompt"].append(messages)
                 outputs["_response"].append([{
                     "role": Role.ASSISTANT_AUDIO.value,
-                    "content": message[dataset_attr.content_tag],
+                    "content": message[dataset_attr.content_tag].strip(),
                     "audios": audios
                 }])
                 outputs["_system"].append(system)
@@ -831,7 +841,7 @@ def convert_tts_packed_dialogue(
                 messages.append(
                     {
                         "role": Role.ASSISTANT.value,
-                        "content": message[dataset_attr.content_tag],
+                        "content": message[dataset_attr.content_tag].strip(),
                     }
                 )
                 current_seq_length += len(message[dataset_attr.content_tag].split())

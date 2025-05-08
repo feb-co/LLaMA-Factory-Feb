@@ -21,7 +21,6 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-from functools import partial
 from typing import TYPE_CHECKING, Callable, Literal, Optional, Tuple
 
 
@@ -36,9 +35,8 @@ from .supervised_text import (
     InstructionDatasetProcessor
 )
 from .process_audio import (
-    preprocess_avater_audio_dataset,
-    preprocess_packed_avater_audio_dataset,
-    print_avater_audio_dataset_example
+    AvatarAudioDatasetProcessor,
+    PackedAvatarAudioDatasetProcessor
 )
 
 
@@ -73,24 +71,9 @@ def get_dataset_processor(
         dataset_processor_class = InstructionDatasetProcessor
     elif stage == "avater_audio":
         if data_args.packing:
-            preprocess_func = partial(
-                preprocess_packed_avater_audio_dataset,
-                template=template,
-                tokenizer=tokenizer,
-                processor=processor,
-                data_args=data_args,
-            )
+            dataset_processor_class = PackedAvatarAudioDatasetProcessor
         else:
-            preprocess_func = partial(
-                preprocess_avater_audio_dataset,
-                template=template,
-                tokenizer=tokenizer,
-                processor=processor,
-                data_args=data_args,
-            )
-        print_function = partial(
-            print_avater_audio_dataset_example, tokenizer=tokenizer
-        )
+            dataset_processor_class = AvatarAudioDatasetProcessor
     else:
         raise NotImplementedError
 

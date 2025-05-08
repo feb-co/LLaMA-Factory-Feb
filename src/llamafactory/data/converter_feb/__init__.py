@@ -84,7 +84,6 @@ def align_dataset(
             desc="Converting format of dataset",
         )
 
-    # 根据数据集类型设置批处理参数
     is_batch_dataset = (
         dataset_attr.formatting == "audio_arrow_tts" 
         and any(key in dataset_attr.dataset_key for key in ["dialogue_", "packed_"])

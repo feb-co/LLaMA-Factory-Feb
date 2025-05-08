@@ -195,7 +195,7 @@ def _get_preprocessed_dataset(
     dataset: Optional[Union["Dataset", "IterableDataset"]],
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["dpo", "dpo_audio", "pretrain", "conversation", "instruction", "avater_audio"],
+    stage: Literal["dpo", "dpo_audio", "pretrain", "conversation", "instruction", "avatar_audio"],
     template: "TemplateFeb",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,

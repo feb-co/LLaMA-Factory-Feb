@@ -50,7 +50,7 @@ AUDIO_SPLIT_TAG = [
 logger = logging.get_logger(__name__)
 
 
-def convert_avater_audio_arrow_tts(
+def convert_avatar_audio_arrow_tts(
     example: Dict[str, Any],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",

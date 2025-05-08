@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 TARGET_SAMPLE_RATE = 24000
 
 
-def convert_avater_audio(
+def convert_avatar_audio(
     example: Dict[str, Any],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",

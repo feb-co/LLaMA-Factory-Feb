@@ -194,7 +194,7 @@ def process_audio_messages(
     retry_time = 0
     while retry_time < 10:
         try:
-            encoded_pairs = template.encode_avater_audio(tokenizer=tokenizer, messages=messages)
+            encoded_pairs = template.encode_avatar_audio(tokenizer=tokenizer, messages=messages)
             break
         except Exception as e:
             retry_time += 1

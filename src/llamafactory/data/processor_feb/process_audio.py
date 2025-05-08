@@ -128,7 +128,7 @@ class AvatarAudioDatasetProcessor(DatasetProcessor):
             if enocde_outputs is None:
                 continue
 
-            model_inputs = _prepare_model_inputs(self.data_args.cutoff_len, self.tokenizer.text_tokenizer.pad_token_id, enocde_outputs, model_inputs)
+            model_inputs = _prepare_model_inputs(self.data_args.cutoff_len, self.tokenizer.pad_token_id, enocde_outputs, model_inputs)
 
         return model_inputs
 
@@ -230,6 +230,6 @@ class PackedAvatarAudioDatasetProcessor(AvatarAudioDatasetProcessor):
             )
             for knapsack in knapsacks:
                 enocde_outputs: dict = self._prepare_packed_example(system_ids_key, knapsack, batch_model_inputs)
-                model_inputs = _prepare_model_inputs(self.data_args.cutoff_len, self.tokenizer.text_tokenizer.pad_token_id, enocde_outputs, model_inputs)
+                model_inputs = _prepare_model_inputs(self.data_args.cutoff_len, self.tokenizer.pad_token_id, enocde_outputs, model_inputs)
 
         return model_inputs

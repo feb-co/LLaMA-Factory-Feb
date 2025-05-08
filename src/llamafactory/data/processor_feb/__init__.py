@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
 def get_dataset_processor(
     data_args: "DataArguments",
-    stage: Literal["dpo", "dpo_audio", "pretrain", "conversation", "instruction", "avater_audio"],
+    stage: Literal["dpo", "dpo_audio", "pretrain", "conversation", "instruction", "avatar_audio"],
     template: "TemplateFeb",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"],
@@ -69,7 +69,7 @@ def get_dataset_processor(
             dataset_processor_class = ConversationDatasetProcessor
     elif stage == "instruction":
         dataset_processor_class = InstructionDatasetProcessor
-    elif stage == "avater_audio":
+    elif stage == "avatar_audio":
         if data_args.packing:
             dataset_processor_class = PackedAvatarAudioDatasetProcessor
         else:

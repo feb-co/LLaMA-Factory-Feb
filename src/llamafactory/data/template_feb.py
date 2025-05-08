@@ -135,7 +135,7 @@ class TemplateFeb:
         encoded_messages = self._encode(tokenizer, messages, system, None)
         return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
 
-    def encode_avater_audio(
+    def encode_avatar_audio(
         self,
         tokenizer: "PreTrainedTokenizer",
         messages: list[dict[str, str]],
@@ -167,7 +167,7 @@ class TemplateFeb:
                         audio_length, audio_feature = tokenizer.encode_audio_feature(elem)
                         audio_features.append(audio_feature)
                         audio_positions.append([len(token_ids), audio_length])
-                        token_ids += [tokenizer.text_tokenizer.pad_token_id] * audio_length
+                        token_ids += [tokenizer.pad_token_id] * audio_length
 
                         if elem_idx==len(message["content"])-1 or message["content"][elem_idx+1]["type"] != "audio":
                             token_ids += tokenizer.encode(
@@ -302,6 +302,7 @@ class TemplateFeb:
 
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
             logger.info_rank0(f"Add pad token: {tokenizer.pad_token}")
 
         if stop_words:

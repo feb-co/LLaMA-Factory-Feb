@@ -185,6 +185,10 @@ class TemplateFeb:
                 elements = self.format_assistant.apply(content=message["content"])
                 token_ids = self._convert_txt_elements_to_ids(tokenizer, elements)
                 token_elem = {"token_ids": token_ids}
+            elif message["role"] == Role.MASK.value:
+                elements = self.format_assistant.apply(content=message["content"])
+                token_ids = self._convert_txt_elements_to_ids(tokenizer, elements)
+                token_elem = {"token_ids": token_ids}
             elif message["role"] == Role.ASSISTANT_AUDIO.value:
                 text_elements = self.format_assistant.apply(content=message["content"])
                 token_ids = self._convert_txt_elements_to_ids(tokenizer, text_elements)

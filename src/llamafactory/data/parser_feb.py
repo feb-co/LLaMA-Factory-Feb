@@ -54,6 +54,7 @@ class DatasetAttr:
     # common columns
     system: Optional[str] = None
     system_list: Optional[list] = None
+    style_list: Optional[list] = None
     tools: Optional[str] = None
     images: Optional[str] = None
     videos: Optional[str] = None
@@ -112,6 +113,7 @@ class DatasetAttr:
                 column_names.extend(["prefix", "document"])
             elif "audio" in self.formatting:
                 column_names.extend(["system_list"])
+                column_names.extend(["style_list"])
 
             for column_name in column_names:
                 if column_name in attr["columns"]:

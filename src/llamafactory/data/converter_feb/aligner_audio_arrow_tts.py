@@ -55,32 +55,35 @@ def convert_avatar_audio_arrow_tts(
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
 ) -> Dict[str, Any]:
-    if "packed_LargeScaleASR" in dataset_attr.dataset_key:
-        return convert_packed_LargeScaleASR(example, dataset_attr, data_args)
-    elif "packed_parler" in dataset_attr.dataset_key:
-        return convert_packed_parler_tts(example, dataset_attr, data_args)
-    elif "packed_text" in dataset_attr.dataset_key:
-        return convert_tts_packed_text(example, dataset_attr, data_args)
-    elif "packed_segment" in dataset_attr.dataset_key:
-        return convert_tts_packed_segment(example, dataset_attr, data_args)
-    elif "packed_dialogue" in dataset_attr.dataset_key:
-        return convert_tts_packed_dialogue(example, dataset_attr, data_args)
-
-    if "LargeScaleASR" in dataset_attr.dataset_key:
-        return convert_LargeScaleASR(example, dataset_attr, data_args)
-    elif "parler_tts" in dataset_attr.dataset_key:
-        return convert_parler_tts(example, dataset_attr, data_args)
-    elif "text_" in dataset_attr.dataset_key:
+    if "asr_LargeScaleASR" in dataset_attr.dataset_key:
+        return convert_asr_LargeScaleASR(example, dataset_attr, data_args)
+    elif "asr_packed_LargeScaleASR" in dataset_attr.dataset_key:
+        return convert_asr_packed_LargeScaleASR(example, dataset_attr, data_args)
+    elif "asr_text" in dataset_attr.dataset_key:
         return convert_tts_text(example, dataset_attr, data_args)
-    elif "segment_" in dataset_attr.dataset_key:
-        return convert_tts_segment(example, dataset_attr, data_args)
+    elif "asr_packed_text" in dataset_attr.dataset_key:
+        return convert_tts_packed_text(example, dataset_attr, data_args)
+    elif "dialogue_packed" in dataset_attr.dataset_key:
+        return convert_dialogue_packed(example, dataset_attr, data_args)
     elif "dialogue_" in dataset_attr.dataset_key:
-        return convert_tts_dialogue(example, dataset_attr, data_args)
+        return convert_dialogue(example, dataset_attr, data_args)
+    elif "tts_parler" in dataset_attr.dataset_key:
+        return convert_tts_parler(example, dataset_attr, data_args)
+    elif "tts_packed_parler" in dataset_attr.dataset_key:
+        return convert_tts_packed_parler(example, dataset_attr, data_args)
+    elif "tts_text" in dataset_attr.dataset_key:
+        return convert_tts_text(example, dataset_attr, data_args)
+    elif "tts_packed_text" in dataset_attr.dataset_key:
+        return convert_tts_packed_text(example, dataset_attr, data_args)
+    elif "tts_segment" in dataset_attr.dataset_key:
+        return convert_tts_segment(example, dataset_attr, data_args)
+    elif "tts_packed_segment" in dataset_attr.dataset_key:
+        return convert_tts_packed_segment(example, dataset_attr, data_args)
     else:
         raise NotImplementedError
 
 
-def convert_LargeScaleASR(
+def convert_asr_LargeScaleASR(
     example: Dict[str, Any],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
@@ -142,7 +145,7 @@ def convert_LargeScaleASR(
     return output
 
 
-def convert_packed_LargeScaleASR(
+def convert_asr_packed_LargeScaleASR(
     examples: Dict[str, List[Any]],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
@@ -230,7 +233,201 @@ def convert_packed_LargeScaleASR(
     return outputs
 
 
-def convert_parler_tts(
+def convert_dialogue(
+    examples: Dict[str, List[Any]],
+    dataset_attr: "DatasetAttr",
+    data_args: "DataArguments",
+) -> Dict[str, Any]:
+    tag_mapping = {
+        dataset_attr.user_tag: Role.USER.value,
+        dataset_attr.user_audio_tag: Role.USER_AUDIO.value,
+        dataset_attr.assistant_tag: Role.ASSISTANT.value,
+        dataset_attr.assistant_audio_tag: Role.ASSISTANT_AUDIO.value,
+        dataset_attr.mask_tag: Role.MASK.value,
+    }
+
+    outputs = {
+        "_prompt": [],
+        "_response": [],
+        "_system": [],
+        "_tools": [],
+        "_images": [],
+        "_videos": [],
+    }
+    for i in range(len(examples["id"])):
+        system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+        style_list = dataset_attr.style_list if dataset_attr.style_list else []
+        system = random.choice(system_list)
+
+        if style_list:
+            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(["\n", "\n\n", " "]) + style
+        else:
+            style = ""
+
+        system += style
+        system = system.strip().strip("\n")
+
+        conversations = examples[dataset_attr.messages][i]
+        if (
+            dataset_attr.system_tag
+            and len(conversations) != 0
+            and conversations[0][dataset_attr.role_tag].lower() == dataset_attr.system_tag
+        ):
+            system = conversations[0][dataset_attr.content_tag]
+            conversations = conversations[1:]
+            system_span = system.split("\n\n")
+            system_span[0] += style
+            system = "\n\n".join(system_span)
+
+        messages = []
+        for message in conversations:
+            if message[dataset_attr.role_tag].lower() in [dataset_attr.user_audio_tag, dataset_attr.user_tag, dataset_attr.assistant_tag, dataset_attr.mask_tag]:
+                messages.append(
+                    {
+                        "role": tag_mapping[message[dataset_attr.role_tag].lower()],
+                        "content": message[dataset_attr.content_tag].strip(),
+                    }
+                )
+            elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag:
+                audios = [
+                    {
+                        "id": audio["id"],
+                        "array": resample_audio_array(
+                            audio["array"],
+                            audio["sample_rate"],
+                            target_sr=TARGET_SAMPLE_RATE
+                        ),
+                        "split": audio["split"],
+                    }
+                    for audio in message["audios"]
+                ]
+                outputs["_prompt"].append(copy.deepcopy(messages))
+                outputs["_response"].append([{
+                    "role": Role.ASSISTANT_AUDIO.value,
+                    "content": message[dataset_attr.content_tag].strip(),
+                    "audios": audios
+                }])
+                outputs["_system"].append(system)
+                outputs["_tools"].append("")
+                outputs["_images"].append(None)
+                outputs["_videos"].append(None)
+
+                messages.append(
+                    {
+                        "role": Role.ASSISTANT.value,
+                        "content": message[dataset_attr.content_tag].strip(),
+                    }
+                )
+            else:
+                raise NotImplementedError
+
+    return outputs
+
+
+def convert_dialogue_packed(
+    examples: Dict[str, List[Any]],
+    dataset_attr: "DatasetAttr",
+    data_args: "DataArguments",
+) -> Dict[str, Any]:
+    cut_off_len = random.choice([int(length) for length in range(data_args.cutoff_len//4, data_args.cutoff_len, 256)])
+
+    tag_mapping = {
+        dataset_attr.user_tag: Role.USER.value,
+        dataset_attr.user_audio_tag: Role.USER_AUDIO.value,
+        dataset_attr.assistant_tag: Role.ASSISTANT.value,
+        dataset_attr.assistant_audio_tag: Role.ASSISTANT_AUDIO.value,
+        dataset_attr.mask_tag: Role.MASK.value,
+    }
+
+    outputs = {
+        "_prompt": [],
+        "_response": [],
+        "_system": [],
+        "_tools": [],
+        "_images": [],
+        "_videos": [],
+    }
+    messages = []
+    current_seq_length = 0
+    for i in range(len(examples["id"])):
+        system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+        style_list = dataset_attr.style_list if dataset_attr.style_list else []
+        system = random.choice(system_list)
+        
+        if style_list:
+            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(["\n", "\n\n", " "]) + style
+        else:
+            style = ""
+
+        system += style
+        system = system.strip().strip("\n")
+
+        conversations = examples[dataset_attr.messages][i]
+        if (
+            dataset_attr.system_tag
+            and len(conversations) != 0
+            and conversations[0][dataset_attr.role_tag].lower() == dataset_attr.system_tag
+        ):
+            system = conversations[0][dataset_attr.content_tag]
+            conversations = conversations[1:]
+            system_span = system.split("\n\n")
+            system_span[0] += style
+            system = "\n\n".join(system_span)
+
+        for message in conversations:
+            if message[dataset_attr.role_tag].lower() in [dataset_attr.user_audio_tag, dataset_attr.user_tag, dataset_attr.assistant_tag, dataset_attr.mask_tag]:
+                messages.append(
+                    {
+                        "role": tag_mapping[message[dataset_attr.role_tag].lower()],
+                        "content": message[dataset_attr.content_tag].strip(),
+                    }
+                )
+                current_seq_length += len(message[dataset_attr.content_tag].split())
+            elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag and ((current_seq_length + len(message[dataset_attr.content_tag].split()) + 8 >= cut_off_len) or (i == len(examples["id"])-1)):
+                audios = [
+                    {
+                        "id": audio["id"],
+                        "array": resample_audio_array(
+                            audio["array"],
+                            audio["sample_rate"],
+                            target_sr=TARGET_SAMPLE_RATE
+                        ),
+                        "split": audio["split"],
+                    }
+                    for audio in message["audios"]
+                ]
+
+                outputs["_prompt"].append(messages)
+                outputs["_response"].append([{
+                    "role": Role.ASSISTANT_AUDIO.value,
+                    "content": message[dataset_attr.content_tag].strip(),
+                    "audios": audios
+                }])
+                outputs["_system"].append(system)
+                outputs["_tools"].append("")
+                outputs["_images"].append(None)
+                outputs["_videos"].append(None)
+
+                messages = []
+                current_seq_length = 0
+                break
+            elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag:
+                messages.append(
+                    {
+                        "role": Role.ASSISTANT.value,
+                        "content": message[dataset_attr.content_tag].strip(),
+                    }
+                )
+                current_seq_length += len(message[dataset_attr.content_tag].split())
+            else:
+                raise NotImplementedError
+
+    return outputs
+
+
+def convert_tts_parler(
     example: Dict[str, Any],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
@@ -239,7 +436,7 @@ def convert_parler_tts(
     system = random.choice(system_list)
     example_id = example["speaker_id"]
     if "audio_description" in example and example["audio_description"]:
-        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=example["audio_description"].replace("_", " "))
+        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=example["audio_description"].replace("_", " ")).strip()
     else:
         style = ""
 
@@ -293,7 +490,7 @@ def convert_parler_tts(
     return output
 
 
-def convert_packed_parler_tts(
+def convert_tts_packed_parler(
     examples: Dict[str, List[Any]],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
@@ -318,7 +515,7 @@ def convert_packed_parler_tts(
         system = random.choice(system_list)
         example_id = examples["speaker_id"][i]
         if "audio_description" in examples and examples["audio_description"][i]:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=examples["audio_description"][i].replace("_", " "))
+            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=examples["audio_description"][i].replace("_", " ")).strip()
         else:
             style = ""
 
@@ -389,7 +586,15 @@ def convert_tts_text(
     data_args: "DataArguments",
 ) -> Dict[str, Any]:
     system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+    style_list = dataset_attr.style_list if dataset_attr.style_list else []
     system = random.choice(system_list)
+
+    if style_list:
+        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+        style = random.choice(["\n", "\n\n", " "]) + style
+    else:
+        style = ""
+
     try:
         example_id = example["id"]
     except:
@@ -401,9 +606,10 @@ def convert_tts_text(
     flag_list = [0, 1]
     flag = random.choice(flag_list)
     if flag == 0:
-        system += (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
+        system += style + (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
         user_prompt = audio_text
     else:
+        system += style
         user_prompt = random.choice(USER_TTS_PROMPT).format(text=audio_text)
 
     system = system.strip().strip("\n")
@@ -466,16 +672,24 @@ def convert_tts_packed_text(
     current_seq_length = 0
     for i in range(len(examples["id"])):
         system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+        style_list = dataset_attr.style_list if dataset_attr.style_list else []
         system = random.choice(system_list)
         example_id = examples["id"][i]
+
+        if style_list:
+            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(["\n", "\n\n", " "]) + style
+        else:
+            style = ""
 
         audio_text = random.choice([examples["text"][i], examples["text"][i].lower()])
         audio_text = audio_text.strip()
 
         if flag == 0:
-            system += (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
+            system += style + (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
             user_prompt = audio_text
         else:
+            system += style
             user_prompt = random.choice(USER_TTS_PROMPT).format(text=audio_text)
 
         system = system.strip().strip("\n")
@@ -534,7 +748,14 @@ def convert_tts_segment(
     data_args: "DataArguments",
 ) -> Dict[str, Any]:
     system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+    style_list = dataset_attr.style_list if dataset_attr.style_list else []
     system = random.choice(system_list)
+
+    if style_list:
+        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+        style = random.choice(["\n", "\n\n", " "]) + style
+    else:
+        style = ""
 
     audio_text = ""
     audios = []
@@ -573,9 +794,10 @@ def convert_tts_segment(
     flag_list = [0, 1]
     flag = random.choice(flag_list)
     if flag == 0:
-        system += (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
+        system += style + (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
         user_prompt = audio_text
     else:
+        system += style
         user_prompt = random.choice(USER_TTS_PROMPT).format(text=audio_text)
 
     system = system.strip().strip("\n")
@@ -623,7 +845,14 @@ def convert_tts_packed_segment(
     current_seq_length = 0
     for i in range(len(examples["segments"])):
         system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+        style_list = dataset_attr.style_list if dataset_attr.style_list else []
         system = random.choice(system_list)
+
+        if style_list:
+            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(["\n", "\n\n", " "]) + style
+        else:
+            style = ""
 
         audio_text = ""
         audios = []
@@ -660,13 +889,14 @@ def convert_tts_packed_segment(
         audio_text = random.choice([audio_text, audio_text.lower()])
         audio_text = audio_text.strip()
         if flag == 0:
-            system += (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
+            system += style + (random.choice(["\n", "\n\n", " "]) + random.choice(SYSTEM_TTS_PROMPT))
             user_prompt = audio_text
         else:
+            system += style
             user_prompt = random.choice(USER_TTS_PROMPT).format(text=audio_text)
 
         system = system.strip().strip("\n")
-        
+
         if (current_seq_length + len(system.split()) + len(user_prompt.split()) + len(audio_text.split()) + 8 >= cut_off_len) or (i == len(examples["segments"])-1):
             prompt += [{
                 "role": Role.USER.value,
@@ -697,155 +927,5 @@ def convert_tts_packed_segment(
                     "content": audio_text,
                 }
             ]
-
-    return outputs
-
-
-def convert_tts_dialogue(
-    examples: Dict[str, List[Any]],
-    dataset_attr: "DatasetAttr",
-    data_args: "DataArguments",
-) -> Dict[str, Any]:
-    tag_mapping = {
-        dataset_attr.user_tag: Role.USER.value,
-        dataset_attr.user_audio_tag: Role.USER_AUDIO.value,
-        dataset_attr.assistant_tag: Role.ASSISTANT.value,
-        dataset_attr.assistant_audio_tag: Role.ASSISTANT_AUDIO.value,
-    }
-
-    outputs = {
-        "_prompt": [],
-        "_response": [],
-        "_system": [],
-        "_tools": [],
-        "_images": [],
-        "_videos": [],
-    }
-    for i in range(len(examples["id"])):
-        system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
-        system = random.choice(system_list)
-
-        conversations = examples["conversations"][i]
-        messages = []
-        for message in conversations:
-            if message[dataset_attr.role_tag].lower() in [dataset_attr.user_audio_tag, dataset_attr.user_tag, dataset_attr.assistant_tag]:
-                messages.append(
-                    {
-                        "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                        "content": message[dataset_attr.content_tag].strip(),
-                    }
-                )
-            elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag:
-                audios = [
-                    {
-                        "id": audio["id"],
-                        "array": resample_audio_array(
-                            audio["array"],
-                            audio["sample_rate"],
-                            target_sr=TARGET_SAMPLE_RATE
-                        ),
-                        "split": audio["split"],
-                    }
-                    for audio in message["audios"]
-                ]
-                outputs["_prompt"].append(copy.deepcopy(messages))
-                outputs["_response"].append([{
-                    "role": Role.ASSISTANT_AUDIO.value,
-                    "content": message[dataset_attr.content_tag].strip(),
-                    "audios": audios
-                }])
-                outputs["_system"].append(system)
-                outputs["_tools"].append("")
-                outputs["_images"].append(None)
-                outputs["_videos"].append(None)
-
-                messages.append(
-                    {
-                        "role": Role.ASSISTANT.value,
-                        "content": message[dataset_attr.content_tag].strip(),
-                    }
-                )
-            else:
-                raise NotImplementedError
-
-    return outputs
-
-
-def convert_tts_packed_dialogue(
-    examples: Dict[str, List[Any]],
-    dataset_attr: "DatasetAttr",
-    data_args: "DataArguments",
-) -> Dict[str, Any]:
-    cut_off_len = random.choice([int(length) for length in range(data_args.cutoff_len//4, data_args.cutoff_len, 256)])
-
-    tag_mapping = {
-        dataset_attr.user_tag: Role.USER.value,
-        dataset_attr.user_audio_tag: Role.USER_AUDIO.value,
-        dataset_attr.assistant_tag: Role.ASSISTANT.value,
-        dataset_attr.assistant_audio_tag: Role.ASSISTANT_AUDIO.value,
-    }
-
-    outputs = {
-        "_prompt": [],
-        "_response": [],
-        "_system": [],
-        "_tools": [],
-        "_images": [],
-        "_videos": [],
-    }
-    messages = []
-    current_seq_length = 0
-    for i in range(len(examples["id"])):
-        system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
-        system = random.choice(system_list)
-
-        conversations = examples["conversations"][i]
-        for message in conversations:
-            if message[dataset_attr.role_tag].lower() in [dataset_attr.user_audio_tag, dataset_attr.user_tag, dataset_attr.assistant_tag]:
-                messages.append(
-                    {
-                        "role": tag_mapping[message[dataset_attr.role_tag].lower()],
-                        "content": message[dataset_attr.content_tag].strip(),
-                    }
-                )
-                current_seq_length += len(message[dataset_attr.content_tag].split())
-            elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag and ((current_seq_length + len(message[dataset_attr.content_tag].split()) + 8 >= cut_off_len) or (i == len(examples["id"])-1)):
-                audios = [
-                    {
-                        "id": audio["id"],
-                        "array": resample_audio_array(
-                            audio["array"],
-                            audio["sample_rate"],
-                            target_sr=TARGET_SAMPLE_RATE
-                        ),
-                        "split": audio["split"],
-                    }
-                    for audio in message["audios"]
-                ]
-
-                outputs["_prompt"].append(messages)
-                outputs["_response"].append([{
-                    "role": Role.ASSISTANT_AUDIO.value,
-                    "content": message[dataset_attr.content_tag].strip(),
-                    "audios": audios
-                }])
-                outputs["_system"].append(system)
-                outputs["_tools"].append("")
-                outputs["_images"].append(None)
-                outputs["_videos"].append(None)
-
-                messages = []
-                current_seq_length = 0
-                break
-            elif message[dataset_attr.role_tag].lower() == dataset_attr.assistant_audio_tag:
-                messages.append(
-                    {
-                        "role": Role.ASSISTANT.value,
-                        "content": message[dataset_attr.content_tag].strip(),
-                    }
-                )
-                current_seq_length += len(message[dataset_attr.content_tag].split())
-            else:
-                raise NotImplementedError
 
     return outputs

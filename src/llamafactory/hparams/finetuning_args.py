@@ -461,8 +461,8 @@ class FinetuningArguments(
         self.additional_target: Optional[list[str]] = split_arg(self.additional_target)
         self.galore_target: list[str] = split_arg(self.galore_target)
         self.apollo_target: list[str] = split_arg(self.apollo_target)
-        self.use_ref_model = self.stage == "dpo" and self.pref_loss not in ["orpo", "simpo"]
-
+        self.use_ref_model = "dpo" in self.stage and self.pref_loss not in ["orpo", "simpo"]
+        
         assert self.finetuning_type in ["lora", "freeze", "full"], "Invalid fine-tuning method."
         assert self.ref_model_quantization_bit in [None, 8, 4], "We only accept 4-bit or 8-bit quantization."
         assert self.reward_model_quantization_bit in [None, 8, 4], "We only accept 4-bit or 8-bit quantization."

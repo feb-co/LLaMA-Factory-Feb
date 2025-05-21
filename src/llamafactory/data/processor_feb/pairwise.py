@@ -30,9 +30,7 @@ from .processor_utils import DatasetProcessor, AudioExample, process_audio_messa
 
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedTokenizer
     from ..template_feb import TemplateFeb
-    from ..mm_plugin import AudioInput, ImageInput, VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -45,9 +43,6 @@ class TextPairwiseDatasetProcessor(DatasetProcessor):
         response: Sequence[Dict[str, str]],
         system: Optional[str],
         tools: Optional[str],
-        images: list["ImageInput"],
-        videos: list["VideoInput"],
-        audios: list["AudioInput"],
     ) -> Tuple[List[int], List[int], List[int], List[int]]:
         self.template: TemplateFeb
 
@@ -76,9 +71,6 @@ class TextPairwiseDatasetProcessor(DatasetProcessor):
             "rejected_input_ids": [],
             "rejected_attention_mask": [],
             "rejected_labels": [],
-            "images": [],
-            "videos": [],
-            "audios": []
         }
         for i in range(len(examples["_prompt"])):
             if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) < 2:
@@ -94,9 +86,6 @@ class TextPairwiseDatasetProcessor(DatasetProcessor):
                 response=examples["_response"][i],
                 system=examples["_system"][i],
                 tools=examples["_tools"][i],
-                images=examples["_images"][i] or [],
-                videos=examples["_videos"][i] or [],
-                audios=examples["_audios"][i] or [],
             )
 
             assert len(chosen_input_ids) == len(chosen_labels)
@@ -130,23 +119,20 @@ class TextPairwiseDatasetProcessor(DatasetProcessor):
             model_inputs["rejected_input_ids"].append(rejected_input_ids)
             model_inputs["rejected_attention_mask"].append([1] * len(rejected_input_ids))
             model_inputs["rejected_labels"].append(rejected_labels)
-            model_inputs["images"].append(examples["_images"][i])
-            model_inputs["videos"].append(examples["_videos"][i])
-            model_inputs["audios"].append(examples["_audios"][i])
 
         return model_inputs
 
-    def print_pairwise_dataset_example(example: Dict[str, List[int]], tokenizer: "PreTrainedTokenizer") -> None:
+    def print_data_example(self, example: dict[str, list[int]]) -> None:
         valid_chosen_labels = list(filter(lambda x: x != IGNORE_INDEX, example["chosen_labels"]))
         valid_rejected_labels = list(filter(lambda x: x != IGNORE_INDEX, example["rejected_labels"]))
         print("chosen_input_ids:\n{}".format(example["chosen_input_ids"]))
-        print("chosen_inputs:\n{}".format(tokenizer.decode(example["chosen_input_ids"], skip_special_tokens=False)))
+        print("chosen_inputs:\n{}".format(self.tokenizer.decode(example["chosen_input_ids"], skip_special_tokens=False)))
         print("chosen_label_ids:\n{}".format(example["chosen_labels"]))
-        print("chosen_labels:\n{}".format(tokenizer.decode(valid_chosen_labels, skip_special_tokens=False)))
+        print("chosen_labels:\n{}".format(self.tokenizer.decode(valid_chosen_labels, skip_special_tokens=False)))
         print("rejected_input_ids:\n{}".format(example["rejected_input_ids"]))
-        print("rejected_inputs:\n{}".format(tokenizer.decode(example["rejected_input_ids"], skip_special_tokens=False)))
+        print("rejected_inputs:\n{}".format(self.tokenizer.decode(example["rejected_input_ids"], skip_special_tokens=False)))
         print("rejected_label_ids:\n{}".format(example["rejected_labels"]))
-        print("rejected_labels:\n{}".format(tokenizer.decode(valid_rejected_labels, skip_special_tokens=False)))
+        print("rejected_labels:\n{}".format(self.tokenizer.decode(valid_rejected_labels, skip_special_tokens=False)))
 
 
 class AudioPairwiseDatasetProcessor(DatasetProcessor):
@@ -156,9 +142,6 @@ class AudioPairwiseDatasetProcessor(DatasetProcessor):
         response: Sequence[Dict[str, str]],
         system: Optional[str],
         tools: Optional[str],
-        images: list["ImageInput"],
-        videos: list["VideoInput"],
-        audios: list["AudioInput"],
     ) -> Tuple[List[int], List[int], List[int], List[int]]:
         self.template: TemplateFeb
         chosen_messages = prompt + [response[0]]
@@ -177,6 +160,9 @@ class AudioPairwiseDatasetProcessor(DatasetProcessor):
             tokenizer=self.tokenizer,
             mask_history=self.data_args.mask_history
         )
+        
+        if chosen_audio_example is None or rejected_audio_example is None:
+            return None
 
         # chosen
         chosen_input_ids = prefix_ids + chosen_audio_example.text_input_ids
@@ -205,8 +191,7 @@ class AudioPairwiseDatasetProcessor(DatasetProcessor):
             "chosen_decoder_attention_mask": [], "chosen_encoder_decoder_attention_mask": [],
             "rejected_input_ids": [], "rejected_attention_mask": [], "rejected_valid_tokens_pos": [],
             "rejected_decoder_input_ids": [], "rejected_decoder_labels": [],
-            "rejected_decoder_attention_mask": [], "rejected_encoder_decoder_attention_mask": [],
-            "images": [], "videos": [], "audios": []
+            "rejected_decoder_attention_mask": [], "rejected_encoder_decoder_attention_mask": []
         }
         for i in range(len(examples["_prompt"])):
             if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) < 2:
@@ -217,23 +202,25 @@ class AudioPairwiseDatasetProcessor(DatasetProcessor):
                 )
                 continue
 
+            enocde_outputs = self._encode_data_example(
+                prompt=examples["_prompt"][i],
+                response=examples["_response"][i],
+                system=examples["_system"][i],
+                tools=examples["_tools"][i],
+            )
+
+            if enocde_outputs is None:
+                continue
+
             (
                 chosen_input_ids, chosen_valid_tokens_pos, chosen_decoder_input_ids, chosen_encoder_decoder_attention_mask, chosen_decoder_labels,
                 rejected_input_ids, rejected_valid_tokens_pos, rejected_decoder_input_ids, rejected_encoder_decoder_attention_mask, rejected_decoder_labels
-            ) = self._encode_data_example(
-                    prompt=examples["_prompt"][i],
-                    response=examples["_response"][i],
-                    system=examples["_system"][i],
-                    tools=examples["_tools"][i],
-                    images=examples["_images"][i] or [],
-                    videos=examples["_videos"][i] or [],
-                    audios=examples["_audios"][i] or [],
-                )
+            ) = enocde_outputs
 
             if len(chosen_input_ids) < self.data_args.cutoff_len:
                 pad_length = self.data_args.cutoff_len - len(chosen_input_ids)
                 chosen_input_ids += [self.tokenizer.pad_token_id] * pad_length
-            
+
             if len(rejected_input_ids) < self.data_args.cutoff_len:
                 pad_length = self.data_args.cutoff_len - len(rejected_input_ids)
                 rejected_input_ids += [self.tokenizer.pad_token_id] * pad_length
@@ -254,14 +241,10 @@ class AudioPairwiseDatasetProcessor(DatasetProcessor):
             model_inputs["rejected_encoder_decoder_attention_mask"].append(rejected_encoder_decoder_attention_mask if rejected_encoder_decoder_attention_mask else None)
             model_inputs["rejected_decoder_labels"].append(rejected_decoder_labels if rejected_decoder_labels else None)
 
-            model_inputs["images"].append(examples["_images"][i])
-            model_inputs["videos"].append(examples["_videos"][i])
-            model_inputs["audios"].append(examples["_audios"][i])
-
         return model_inputs
 
-    def print_pairwise_dataset_example(example: Dict[str, List[int]], tokenizer: "PreTrainedTokenizer") -> None:
+    def print_data_example(self, example: dict[str, list[int]]) -> None:
         print("chosen_input_ids:\n{}".format(example["chosen_input_ids"]))
-        print("chosen_inputs:\n{}".format(tokenizer.decode(example["chosen_input_ids"], skip_special_tokens=False)))
+        print("chosen_inputs:\n{}".format(self.tokenizer.text_tokenizer.decode(example["chosen_input_ids"], skip_special_tokens=False)))
         print("rejected_input_ids:\n{}".format(example["rejected_input_ids"]))
-        print("rejected_inputs:\n{}".format(tokenizer.decode(example["rejected_input_ids"], skip_special_tokens=False)))
+        print("rejected_inputs:\n{}".format(self.tokenizer.text_tokenizer.decode(example["rejected_input_ids"], skip_special_tokens=False)))

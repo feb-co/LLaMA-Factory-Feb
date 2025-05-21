@@ -22,7 +22,7 @@ from transformers.integrations import is_deepspeed_zero3_enabled
 from accelerate.hooks import add_hook_to_module, remove_hook_from_module
 
 from ..extras import logging
-from .model_utils.misc import find_all_linear_modules, find_expanded_modules
+from .model_utils.misc_feb import find_all_linear_modules, find_expanded_modules
 from .model_utils.quantization import QuantizationMethod
 from .model_utils.unsloth import get_unsloth_peft_model, load_unsloth_peft_model
 from .model_utils.visual import get_forbidden_modules, patch_target_modules
@@ -248,6 +248,7 @@ def _setup_lora_tuning(
                 inference_mode=False,
                 **peft_kwargs,
             )
+            
             model = get_peft_model(model, lora_config)
 
     if is_trainable and cast_trainable_params_to_fp32:

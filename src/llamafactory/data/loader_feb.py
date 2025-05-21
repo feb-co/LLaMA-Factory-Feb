@@ -286,12 +286,6 @@ def get_dataset(
     dataset_list = []
     for dataset_attr in get_dataset_list(data_args.dataset, data_args.dataset_dir):
         with training_args.main_process_first(desc=f"load dataset: {dataset_attr.dataset_name}"):
-            if (dataset_attr.stage == "rm" and dataset_attr.ranking is False) or (
-                dataset_attr.stage != "rm" and dataset_attr.ranking is True
-            ):
-                raise ValueError(
-                    f"The dataset ({dataset_attr.dataset_name}) is not applicable in the current training stage ({dataset_attr.stage})."
-                )
             sub_dataset = _load_single_dataset(
                 dataset_attr, model_args, data_args, training_args
             )

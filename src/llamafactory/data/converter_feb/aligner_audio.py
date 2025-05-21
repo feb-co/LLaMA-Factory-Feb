@@ -138,6 +138,68 @@ def convert_avatar_audio(
                 }
             )
 
+    if (
+        dataset_attr.ranking
+        and isinstance(example[dataset_attr.chosen], dict)
+        and isinstance(example[dataset_attr.rejected], dict)
+    ):  # pairwise example
+        chosen = example[dataset_attr.chosen]
+        rejected = example[dataset_attr.rejected]
+        if (
+            chosen[dataset_attr.role_tag].lower() not in accept_tags[-1]
+            or rejected[dataset_attr.role_tag].lower() not in accept_tags[-1]
+        ):
+            logger.warning_rank0(f"Invalid role tag in {[chosen, rejected]}.")
+            broken_data = True
+
+        chosen_audios = []
+        for item in chosen["audios"]:
+            try:
+                array, sample_rate = sf.read(item["file"])
+            except:
+                broken_data = True
+                break
+            chosen_audios.append({
+                "id": item["id"],
+                "array": resample_audio_array(
+                    array,
+                    sample_rate,
+                    target_sr=TARGET_SAMPLE_RATE
+                ),
+                "split": item["split"]
+            })
+
+        reject_audios = []
+        for item in rejected["audios"]:
+            try:
+                array, sample_rate = sf.read(item["file"])
+            except:
+                broken_data = True
+                break
+            reject_audios.append({
+                "id": item["id"],
+                "array": resample_audio_array(
+                    array,
+                    sample_rate,
+                    target_sr=TARGET_SAMPLE_RATE
+                ),
+                "split": item["split"]
+            })
+
+        prompt = aligned_messages
+        response = [
+            {
+                "role": tag_mapping[chosen[dataset_attr.role_tag].lower()],
+                "content": chosen[dataset_attr.content_tag].strip(),
+                "audios": chosen_audios
+            },
+            {
+                "role": tag_mapping[rejected[dataset_attr.role_tag].lower()],
+                "content": rejected[dataset_attr.content_tag].strip(),
+                "audios": reject_audios
+            }
+        ]
+    else:  # normal example
         prompt = aligned_messages[:-1]
         response = aligned_messages[-1:]
 

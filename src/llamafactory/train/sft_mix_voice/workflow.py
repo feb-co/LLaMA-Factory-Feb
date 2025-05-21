@@ -24,7 +24,7 @@
 
 from typing import TYPE_CHECKING, Optional
 
-from ...data import MultiModalDataCollatorForSeq2Seq, get_feb_dataset
+from ...data import SFTDataCollatorWith4DAttentionMask, get_feb_dataset
 from ...data.template_feb import get_template_and_fix_tokenizer
 from ...extras.constants import IGNORE_INDEX
 from ...extras.logging import get_logger
@@ -83,8 +83,10 @@ def run_sft_mix_voice(
 
     # Keyword arguments for `model.generate`
     gen_kwargs = generating_args.to_dict(obey_generation_config=True)
-    gen_kwargs["eos_token_id"] = [tokenizer.eos_token_id] + tokenizer.additional_special_tokens_ids
-    gen_kwargs["pad_token_id"] = tokenizer.pad_token_id
+    gen_kwargs["eos_token_id"] = [tokenizer.text_tokenizer.eos_token_id]
+    if hasattr(tokenizer, "audio_special_token"):
+        gen_kwargs["eoa_token_id"] = [tokenizer.audio_special_token["eoa_token"]]
+    gen_kwargs["pad_token_id"] = tokenizer.eos_token_id
 
     # Initialize our Trainer
     trainer = CustomSeq2SeqTrainer(

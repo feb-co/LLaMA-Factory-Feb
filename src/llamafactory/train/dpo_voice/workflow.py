@@ -63,9 +63,6 @@ class AudioPairwiseDataCollatorWithPadding(MultiModalDataCollatorForSeq2Seq):
                     "decoder_attention_mask": feature[f"{key}_decoder_attention_mask"],
                     "encoder_decoder_attention_mask": feature[f"{key}_encoder_decoder_attention_mask"],
                     "decoder_labels": feature[f"{key}_decoder_labels"],
-                    "images": feature["images"],
-                    "videos": feature["videos"],
-                    "audios": feature["audios"],
                 }
                 concatenated_features.append(target_feature)
 

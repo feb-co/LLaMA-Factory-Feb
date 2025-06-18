@@ -22,7 +22,7 @@
 #
 
 
-SYSTEM_SYTLE_PROMPT = [
+SYSTEM_STYLE_PROMPT = [
     """When conversing with the user through voice, adhere to this speech style:\n``````\n{style}\n``````""",
     """In voice dialogue with the user, keep the following vocal style active:\n``````\n{style}\n``````""",
     """As you talk to the user via voice, maintain this manner of speaking:\n``````\n{style}\n``````""",
@@ -87,6 +87,85 @@ SYSTEM_TTS_PROMPT = [
     "Output exactly what the user has said, making no adjustments to the content or structure.",
     "Repeat the input exactly as it appears, ensuring nothing is added, removed, or altered.",
     "You are assigned to mirror the user's entire input accurately and faithfully, with no omissions."
+]
+
+
+USER_DIALOGUE_PROMPT = [
+    "Your task is to randomly generate a sentence or phrase.",
+    "Please randomly generate a sentence or phrase.",
+    "Generate a random sentence or phrase for me.",
+    "Create a random sentence or phrase.",
+    "Produce a randomly generated sentence or phrase.",
+    "Give me a randomly constructed sentence or phrase.",
+    "Come up with a random sentence or phrase.",
+    "Offer a random sentence or phrase.",
+    "Provide a randomly generated phrase or sentence.",
+    "Supply a random sentence or phrase.",
+    "Deliver a randomly created sentence or phrase.",
+    "Formulate a random sentence or phrase.",
+    "Craft a random phrase or sentence",
+    "Invent a random sentence or phrase",
+    "Concoct a random sentence or phrase",
+    "Generate one random sentence or phrase.",
+    "Create one random sentence or phrase",
+    "Produce one random sentence or phrase",
+    "Give me one random sentence or phrase.",
+    "Provide one randomly generated sentence or phrase",
+    "Offer one random sentence or phrase.",
+    "Come up with one random sentence or phrase",
+    "Supply one random sentence or phrase",
+    "Formulate one random sentence or phrase.",
+    "Craft one random sentence or phrase",
+    "Invent one random sentence or phrase",
+    "Concoct one random sentence or phrase",
+    "Generate an arbitrary sentence or phrase",
+    "Create an arbitrary sentence or phrase.",
+    "Produce an arbitrary sentence or phrase.",
+    "Give me an arbitrary sentence or phrase",
+    "Provide an arbitrary sentence or phrase",
+    "Offer an arbitrary sentence or phrase",
+    "Come up with an arbitrary sentence or phrase",
+    "Supply an arbitrary sentence or phrase."
+]
+
+
+
+USER_DIALOGUE_STYLE_PROMPT = [
+    """You are using voice to communicate with users. Your task is to randomly generate a sentence or phrase, and meet the following speech style requirements:\n``````\n{style}\n``````""",
+    """You are using voice to communicate with users. Please randomly generate a sentence or phrase, and meet the following voice style requirements:\n``````\n{style}\n``````""",
+    """You are speaking with the user. Generate a random utterance that conforms to the following speech style guidelines:\n``````\n{style}\n``````""",
+    """You are interacting by voice. Provide a randomly composed sentence that adheres to the following vocal style requirements:\n``````\n{style}\n``````""",
+    """You are conveying information through speech. Create a random phrase while satisfying these speech style rules:\n``````\n{style}\n``````""",
+    """You are communicating verbally. Produce a random expression that matches the following voice style criteria:\n``````\n{style}\n``````""",
+    """You are engaging via spoken language. Formulate a random statement under the constraints of the given speech style:\n``````\n{style}\n``````""",
+    """You are addressing the user by voice. Craft a random sentence that aligns with these vocal style directions:\n``````\n{style}\n``````""",
+    """You are talking aloud to the user. Generate a random phrase obeying the following speech style parameters:\n``````\n{style}\n``````""",
+    """You are using audible speech. Randomly produce a sentence that fulfills these vocal style specifications:\n``````\n{style}\n``````""",
+    """You are interacting via voice. Randomly generate an utterance following these speech style constraints:\n``````\n{style}\n``````""",
+    """You are speaking to the user. Produce a random phrase in accordance with the following voice style rules:\n``````\n{style}\n``````""",
+    """You are using spoken words. Generate a random sentence that abides by these speech style guidelines:\n``````\n{style}\n``````""",
+    """You are addressing through speech. Craft a random utterance within the given vocal style framework:\n``````\n{style}\n``````""",
+    """You are interacting audibly. Form a random phrase respecting these speech style conditions:\n``````\n{style}\n``````""",
+    """You are vocalizing to the user. Create a random sentence meeting these voice style requirements:\n``````\n{style}\n``````""",
+    """You are conversing by voice. Randomly produce an expression following these speech style guidelines:\n``````\n{style}\n``````""",
+    """You are emitting spoken dialogue. Generate a random statement that complies with these vocal style criteria:\n``````\n{style}\n``````""",
+    """You are engaging in verbal communication. Create a random phrase under these speech style directives:\n``````\n{style}\n``````""",
+    """You are utilizing voice input/output. Produce a random sentence that matches these voice style constraints:\n``````\n{style}\n``````""",
+    """You are conveying a message by voice. Generate a random utterance adhering to these speech style rules:\n``````\n{style}\n``````""",
+    """You are delivering speech. Randomly craft a phrase in line with the following vocal style requirements:\n``````\n{style}\n``````""",
+    """You are providing audio feedback. Create a random sentence that fulfills these speech style specifications:\n``````\n{style}\n``````""",
+    """You are giving a verbal response. Formulate a random expression following these voice style constraints:\n``````\n{style}\n``````""",
+    """You are producing vocal content. Generate a random phrase in accordance with these speech style guidelines:\n``````\n{style}\n``````""",
+    """You are speaking out loud. Create a random utterance that adheres to the following vocal style criteria:\n``````\n{style}\n``````""",
+    """You are narrating verbally. Produce a random sentence under these speech style guidelines:\n``````\n{style}\n``````""",
+    """You are using vocal expression. Randomly generate a phrase that meets these speech style conditions:\n``````\n{style}\n``````""",
+    """You are articulating words aloud. Create a random statement following these vocal style rules:\n``````\n{style}\n``````""",
+    """You are communicating orally. Randomly produce a sentence that aligns with these speech style specifications:\n``````\n{style}\n``````""",
+    """You are giving spoken instructions. Generate a random phrase that complies with these voice style requirements:\n``````\n{style}\n``````""",
+    """You are chatting using speech. Craft a random utterance while satisfying these speech style guidelines:\n``````\n{style}\n``````""",
+    """You are interacting via audible dialogue. Formulate a random sentence adhering to these vocal style constraints:\n``````\n{style}\n``````""",
+    """You are engaging in spoken interaction. Produce a random phrase that meets the following speech style criteria:\n``````\n{style}\n``````""",
+    """You are conveying ideas by voice. Create a random utterance consistent with these vocal style rules:\n``````\n{style}\n``````""",
 ]
 
 

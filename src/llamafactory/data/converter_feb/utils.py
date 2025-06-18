@@ -20,6 +20,9 @@ def process_audio_bytes(byte_data):
 def resample_audio_array(array, orig_sr, target_sr):
     if isinstance(array, list):
         array = np.array(array)
+    
+    if array.ndim == 2:
+        array = array.mean(axis=1)
 
     if orig_sr == target_sr:
         return array

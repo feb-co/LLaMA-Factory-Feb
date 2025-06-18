@@ -31,7 +31,10 @@ from .utils import (
     process_audio_bytes,
     resample_audio_array
 )
-from .prompts import SYSTEM_SYTLE_PROMPT, SYSTEM_TTS_PROMPT, USER_TTS_PROMPT
+from .prompts import (
+    SYSTEM_STYLE_PROMPT, SYSTEM_TTS_PROMPT,
+    USER_DIALOGUE_PROMPT, USER_DIALOGUE_STYLE_PROMPT, USER_TTS_PROMPT
+)
 
 
 if TYPE_CHECKING:
@@ -65,6 +68,8 @@ def convert_avatar_audio_arrow_tts(
         return convert_tts_packed_text(example, dataset_attr, data_args)
     elif "dialogue_packed" in dataset_attr.dataset_key:
         return convert_dialogue_packed(example, dataset_attr, data_args)
+    elif "dialogue_parler" in dataset_attr.dataset_key:
+        return convert_dialogue_parler(example, dataset_attr, data_args)
     elif "dialogue_" in dataset_attr.dataset_key:
         return convert_dialogue(example, dataset_attr, data_args)
     elif "tts_parler" in dataset_attr.dataset_key:
@@ -92,7 +97,7 @@ def convert_asr_LargeScaleASR(
     system = random.choice(system_list)
     example_id = example["ID"]
     if "sex" in example and example["sex"]:
-        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=example["sex"].replace("_", " "))
+        style = random.choice(SYSTEM_STYLE_PROMPT).format(style=example["sex"].replace("_", " "))
     else:
         style = ""
 
@@ -170,7 +175,7 @@ def convert_asr_packed_LargeScaleASR(
         system = random.choice(system_list)
         example_id = examples["ID"][i]
         if "sex" in examples and examples["sex"][i]:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=examples["sex"][i].replace("_", " "))
+            style = random.choice(SYSTEM_STYLE_PROMPT).format(style=examples["sex"][i].replace("_", " "))
         else:
             style = ""
 
@@ -260,7 +265,7 @@ def convert_dialogue(
         system = random.choice(system_list)
 
         if style_list:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(SYSTEM_STYLE_PROMPT).format(style=random.choice(style_list))
             style = random.choice(["\n", "\n\n", " "]) + style
         else:
             style = ""
@@ -356,7 +361,7 @@ def convert_dialogue_packed(
         system = random.choice(system_list)
         
         if style_list:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(SYSTEM_STYLE_PROMPT).format(style=random.choice(style_list))
             style = random.choice(["\n", "\n\n", " "]) + style
         else:
             style = ""
@@ -427,6 +432,79 @@ def convert_dialogue_packed(
     return outputs
 
 
+def convert_dialogue_parler(
+    examples: Dict[str, Any],
+    dataset_attr: "DatasetAttr",
+    data_args: "DataArguments",
+) -> Dict[str, Any]:
+    outputs = {
+        "_prompt": [],
+        "_response": [],
+        "_system": [],
+        "_tools": [],
+        "_images": [],
+        "_videos": [],
+    }
+    for i in range(len(examples["speaker_id"])):
+        system_list = dataset_attr.system_list if dataset_attr.system_list else ["You are a helpful assistant."]
+        system = random.choice(system_list)
+        example_id = examples["speaker_id"][i]
+
+        audio_text = random.choice([examples["transcript"][i], examples["transcript"][i].lower()])
+        audio_text = audio_text.strip()
+
+        flag_list = [0, 1]
+        flag = random.choice(flag_list)
+        if flag == 0:
+            if "audio_description" in examples and examples["audio_description"][i]:
+                style = random.choice(SYSTEM_STYLE_PROMPT).format(style=examples["audio_description"][i].replace("_", " ")).strip()
+            else:
+                style = ""
+
+            system += (random.choice(["\n", "\n\n", " "]) + style)
+            user_prompt = random.choice(USER_DIALOGUE_PROMPT)
+        else:
+            if "audio_description" in examples and examples["audio_description"][i]:
+                user_prompt = random.choice(USER_DIALOGUE_STYLE_PROMPT).format(style=examples["audio_description"][i].replace("_", " ")).strip()
+            else:
+                user_prompt = random.choice(USER_DIALOGUE_PROMPT)
+
+        system = system.strip().strip("\n").replace("  ", " ").replace("\n\n\n", "\n\n")
+
+        try:
+            audio_array = examples["audio"][i]["array"]
+            sample_rate = examples["audio"][i]["sampling_rate"]
+            prompt = [{
+                "role": Role.USER.value,
+                "content": user_prompt,
+            }]
+            response = [{
+                "role": Role.ASSISTANT_AUDIO.value,
+                "content": audio_text,
+                "audios": [{
+                    "id": example_id,
+                    "array": resample_audio_array(
+                        audio_array,
+                        orig_sr=sample_rate,
+                        target_sr=TARGET_SAMPLE_RATE
+                    ),
+                    "split": ""
+                }]
+            }]
+        except Exception as e:
+            logger.warning_rank0(e)
+            continue
+
+        outputs["_prompt"].append(prompt)
+        outputs["_response"].append(response)
+        outputs["_system"].append(system)
+        outputs["_tools"].append("")
+        outputs["_images"].append(None)
+        outputs["_videos"].append(None)
+    
+    return outputs
+
+
 def convert_tts_parler(
     example: Dict[str, Any],
     dataset_attr: "DatasetAttr",
@@ -436,7 +514,7 @@ def convert_tts_parler(
     system = random.choice(system_list)
     example_id = example["speaker_id"]
     if "audio_description" in example and example["audio_description"]:
-        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=example["audio_description"].replace("_", " ")).strip()
+        style = random.choice(SYSTEM_STYLE_PROMPT).format(style=example["audio_description"].replace("_", " ")).strip()
     else:
         style = ""
 
@@ -515,7 +593,7 @@ def convert_tts_packed_parler(
         system = random.choice(system_list)
         example_id = examples["speaker_id"][i]
         if "audio_description" in examples and examples["audio_description"][i]:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=examples["audio_description"][i].replace("_", " ")).strip()
+            style = random.choice(SYSTEM_STYLE_PROMPT).format(style=examples["audio_description"][i].replace("_", " ")).strip()
         else:
             style = ""
 
@@ -590,7 +668,7 @@ def convert_tts_text(
     system = random.choice(system_list)
 
     if style_list:
-        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+        style = random.choice(SYSTEM_STYLE_PROMPT).format(style=random.choice(style_list))
         style = random.choice(["\n", "\n\n", " "]) + style
     else:
         style = ""
@@ -677,7 +755,7 @@ def convert_tts_packed_text(
         example_id = examples["id"][i]
 
         if style_list:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(SYSTEM_STYLE_PROMPT).format(style=random.choice(style_list))
             style = random.choice(["\n", "\n\n", " "]) + style
         else:
             style = ""
@@ -752,7 +830,7 @@ def convert_tts_segment(
     system = random.choice(system_list)
 
     if style_list:
-        style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+        style = random.choice(SYSTEM_STYLE_PROMPT).format(style=random.choice(style_list))
         style = random.choice(["\n", "\n\n", " "]) + style
     else:
         style = ""
@@ -849,7 +927,7 @@ def convert_tts_packed_segment(
         system = random.choice(system_list)
 
         if style_list:
-            style = random.choice(SYSTEM_SYTLE_PROMPT).format(style=random.choice(style_list))
+            style = random.choice(SYSTEM_STYLE_PROMPT).format(style=random.choice(style_list))
             style = random.choice(["\n", "\n\n", " "]) + style
         else:
             style = ""

@@ -172,7 +172,14 @@ def load_model(
                 load_class = AutoModelForCausalLM
 
             if model_args.train_from_scratch:
-                model = load_class.from_config(config, torch_dtype=config.torch_dtype, trust_remote_code=model_args.trust_remote_code)
+                retry_time=100
+                retry = 0
+                while retry < retry_time:
+                    try:
+                        model = load_class.from_config(config, torch_dtype=config.torch_dtype, trust_remote_code=model_args.trust_remote_code)
+                        break
+                    except:
+                        retry += 1
             else:
                 model = load_class.from_pretrained(**init_kwargs)
                 if getattr(model.config, "model_type", None) == "qwen2_5_omni":

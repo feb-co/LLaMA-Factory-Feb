@@ -203,8 +203,18 @@ def convert_avatar_audio(
         prompt = aligned_messages[:-1]
         response = aligned_messages[-1:]
 
+    for response_item in response:
+        if "audios" not in response_item or len(response_item["audios"]) == 0:
+            broken_data=True
+            break
+
+        for audio in response_item["audios"]:
+            if audio["array"].ndim != 1 or len(audio["array"])<=0:
+                broken_data = True
+                break
+
     if broken_data:
-        print("Skipping this abnormal example.")
+        print("Skipping this abnormal example!", flush=True)
         prompt, response = [], []
 
     output = {

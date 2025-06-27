@@ -103,7 +103,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
             **init_kwargs,
         )
     except Exception as e:
-        raise OSError("Failed to load tokenizer.") from e
+        raise OSError(f"Failed to load tokenizer from {model_args.model_name_or_path}.") from e
 
     patch_tokenizer(tokenizer, model_args)
     try:

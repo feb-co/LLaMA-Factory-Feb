@@ -12,21 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
-import torch
 from transformers.integrations import is_deepspeed_zero3_enabled
 
 from ...extras.misc import check_version
 
 
 if TYPE_CHECKING:
+    from torch import nn
     from transformers import PretrainedConfig, PreTrainedModel
 
     from ...hparams import ModelArguments
 
 
-def _set_z3_leaf_modules(model: "PreTrainedModel", leaf_modules: list["torch.nn.Module"]) -> None:
+def _set_z3_leaf_modules(model: "PreTrainedModel", leaf_modules: list[Union["nn.Module", str]]) -> None:
     check_version("deepspeed>=0.13.0")
     from deepspeed.utils import set_z3_leaf_modules  # type: ignore
 
@@ -44,10 +44,13 @@ def add_z3_leaf_module(model: "PreTrainedModel") -> None:
 
         _set_z3_leaf_modules(model, [DbrxFFN])
 
-    if model_type == "deepseek_v3":
-        from transformers.models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
+    if model_type == "deepseek_v2":
+        # deepseek v2 uses custom code
+        _set_z3_leaf_modules(model, ["DeepseekV2MoE"])
 
-        _set_z3_leaf_modules(model, [DeepseekV3MoE])
+    if model_type == "deepseek_v3" or model_type == "kimi_vl":
+        # deepseek v3 and kimi vl use custom code
+        _set_z3_leaf_modules(model, ["DeepseekV3MoE"])
 
     if model_type == "granitemoe":
         from transformers.models.granitemoe.modeling_granitemoe import GraniteMoeMoE
@@ -96,27 +99,29 @@ def add_z3_leaf_module(model: "PreTrainedModel") -> None:
 
 
 def configure_moe(config: "PretrainedConfig", model_args: "ModelArguments", is_trainable: bool) -> None:
+    if not is_trainable or not model_args.moe_aux_loss_coef:
+        return
+
     model_type = getattr(config, "model_type", None)
-    if model_args.moe_aux_loss_coef is not None:
-        if model_type in [
-            "dbrx",
-            "granitemoe",
-            "jamba",
-            "jetmoe",
-            "llama4",
-            "mixtral",
-            "olmoe",
-            "phimoe",
-            "qwen2_moe",
-            "qwen3_moe",
-        ]:
-            setattr(config, "output_router_logits", is_trainable)
+    if model_type in [
+        "dbrx",
+        "granitemoe",
+        "jamba",
+        "jetmoe",
+        "llama4",
+        "mixtral",
+        "olmoe",
+        "phimoe",
+        "qwen2_moe",
+        "qwen3_moe",
+    ]:
+        setattr(config, "output_router_logits", True)
 
-        if model_type in ["granitemoe", "jamba", "llama4", "mixtral", "olmoe", "phimoe", "qwen2_moe", "qwen3_moe"]:
-            setattr(config, "router_aux_loss_coef", model_args.moe_aux_loss_coef)
+    if model_type in ["granitemoe", "jamba", "llama4", "mixtral", "olmoe", "phimoe", "qwen2_moe", "qwen3_moe"]:
+        setattr(config, "router_aux_loss_coef", model_args.moe_aux_loss_coef)
 
-        elif model_type == "deepseek":
-            setattr(config, "aux_loss_alpha", model_args.moe_aux_loss_coef)
+    elif model_type == "deepseek":
+        setattr(config, "aux_loss_alpha", model_args.moe_aux_loss_coef)
 
-        elif model_type == "jetmoe":
-            setattr(config, "aux_loss_coef", model_args.moe_aux_loss_coef)
+    elif model_type == "jetmoe":
+        setattr(config, "aux_loss_coef", model_args.moe_aux_loss_coef)

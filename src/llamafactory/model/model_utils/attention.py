@@ -29,10 +29,8 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def configure_attn_implementation(
-    config: "PretrainedConfig", model_args: "ModelArguments", is_trainable: bool
-) -> None:
-    if getattr(config, "model_type", None) == "gemma2" and is_trainable:
+def configure_attn_implementation(config: "PretrainedConfig", model_args: "ModelArguments") -> None:
+    if getattr(config, "model_type", None) == "gemma2":
         if model_args.flash_attn == AttentionFunction.AUTO or model_args.flash_attn == AttentionFunction.FA2:
             if is_flash_attn_2_available():
                 if model_args.flash_attn != AttentionFunction.FA2:
@@ -69,6 +67,9 @@ def configure_attn_implementation(
 
     if getattr(config, "model_type", None) == "internlm2":  # special case for custom models
         setattr(config, "attn_implementation", requested_attn_implementation)
+    elif getattr(config, "model_type", None) == "kimi_vl":
+        setattr(config.vision_config, "_attn_implementation", requested_attn_implementation)
+        setattr(config.text_config, "_attn_implementation", requested_attn_implementation)
     else:
         setattr(config, "_attn_implementation", requested_attn_implementation)
 

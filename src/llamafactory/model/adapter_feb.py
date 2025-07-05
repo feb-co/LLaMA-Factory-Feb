@@ -25,7 +25,7 @@ from ..extras import logging
 from .model_utils.misc_feb import find_all_linear_modules, find_expanded_modules
 from .model_utils.quantization import QuantizationMethod
 from .model_utils.unsloth import get_unsloth_peft_model, load_unsloth_peft_model
-from .model_utils.visual import get_forbidden_modules, patch_target_modules
+from .model_utils.visual import COMPOSITE_MODELS, get_forbidden_modules, patch_target_modules
 
 
 if TYPE_CHECKING:
@@ -102,7 +102,7 @@ def _setup_freeze_tuning(
             hidden_modules.add(name.split(".1.")[-1].split(".")[0])
 
         if re.search(r"\.\d+\.", name) is None:
-            non_hidden_modules.add(name.split(".")[-2])
+            non_hidden_modules.add(name.split(".")[-2])  # remove weight/bias
 
     trainable_layers = []
     for module_name in finetuning_args.freeze_trainable_modules:
@@ -122,6 +122,10 @@ def _setup_freeze_tuning(
                 )
 
             trainable_layers.append(module_name)
+    
+    model_type = getattr(model.config, "model_type", None)
+    if not finetuning_args.freeze_multi_modal_projector and model_type in COMPOSITE_MODELS:
+        trainable_layers.append(COMPOSITE_MODELS[model_type].projector_key)
 
     forbidden_modules = get_forbidden_modules(model.config, finetuning_args)
     for name, param in model.named_parameters():
@@ -175,7 +179,6 @@ def _setup_lora_tuning(
             "cache_dir": model_args.cache_dir,
             "revision": model_args.model_revision,
             "token": model_args.hf_hub_token,
-            "torch_device": "cpu"
         }
 
         for adapter in adapter_to_merge:
@@ -187,7 +190,7 @@ def _setup_lora_tuning(
 
         if adapter_to_resume is not None:  # resume lora training
             if model_args.use_unsloth:
-                model = load_unsloth_peft_model(config, model_args, is_trainable=is_trainable)
+                model = load_unsloth_peft_model(config, model_args, finetuning_args, is_trainable=is_trainable)
             else:
                 model = PeftModel.from_pretrained(model, adapter_to_resume, is_trainable=is_trainable, **init_kwargs)
 
@@ -248,7 +251,6 @@ def _setup_lora_tuning(
                 inference_mode=False,
                 **peft_kwargs,
             )
-            
             model = get_peft_model(model, lora_config)
 
     if is_trainable and cast_trainable_params_to_fp32:

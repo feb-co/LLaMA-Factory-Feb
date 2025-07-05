@@ -79,20 +79,27 @@ def check_version(requirement: str, mandatory: bool = False) -> None:
         logger.warning_rank0_once("Version checking has been disabled, may lead to unexpected behaviors.")
         return
 
-    if mandatory:
-        hint = f"To fix: run `pip install {requirement}`."
+    if "gptmodel" in requirement or "autoawq" in requirement:
+        pip_command = f"pip install {requirement} --no-build-isolation"
     else:
-        hint = f"To fix: run `pip install {requirement}` or set `DISABLE_VERSION_CHECK=1` to skip this check."
+        pip_command = f"pip install {requirement}"
+
+    if mandatory:
+        hint = f"To fix: run `{pip_command}`."
+    else:
+        hint = f"To fix: run `{pip_command}` or set `DISABLE_VERSION_CHECK=1` to skip this check."
 
     require_version(requirement, hint)
 
 
 def check_dependencies() -> None:
     r"""Check the version of the required packages."""
-    check_version("transformers>=4.45.0,<=4.51.3,!=4.46.0,!=4.46.1,!=4.46.2,!=4.46.3,!=4.47.0,!=4.47.1,!=4.48.0")
-    check_version("datasets>=2.16.0,<=3.5.0")
-    check_version("accelerate>=0.34.0,<=1.6.0")
-    check_version("peft>=0.14.0,<=0.15.1")
+    check_version(
+        "transformers>=4.45.0,<=4.52.4,!=4.46.0,!=4.46.1,!=4.46.2,!=4.46.3,!=4.47.0,!=4.47.1,!=4.48.0,!=4.52.0"
+    )
+    check_version("datasets>=2.16.0,<=3.6.0")
+    check_version("accelerate>=1.3.0,<=1.7.0")
+    check_version("peft>=0.14.0,<=0.15.2")
     check_version("trl>=0.8.6,<=0.9.6")
     if is_transformers_version_greater_than("4.46.0") and not is_transformers_version_greater_than("4.48.1"):
         logger.warning_rank0_once("There are known bugs in transformers v4.46.0-v4.48.0, please use other versions.")
@@ -175,8 +182,22 @@ def get_logits_processor() -> "LogitsProcessorList":
     return logits_processor
 
 
+def get_current_memory() -> tuple[int, int]:
+    r"""Get the available and total memory for the current device (in Bytes)."""
+    if is_torch_xpu_available():
+        return torch.xpu.mem_get_info()
+    elif is_torch_npu_available():
+        return torch.npu.mem_get_info()
+    elif is_torch_mps_available():
+        return torch.mps.current_allocated_memory(), torch.mps.recommended_max_memory()
+    elif is_torch_cuda_available():
+        return torch.cuda.mem_get_info()
+    else:
+        return 0, -1
+
+
 def get_peak_memory() -> tuple[int, int]:
-    r"""Get the peak memory usage for the current device (in Bytes)."""
+    r"""Get the peak memory usage (allocated, reserved) for the current device (in Bytes)."""
     if is_torch_xpu_available():
         return torch.xpu.max_memory_allocated(), torch.xpu.max_memory_reserved()
     elif is_torch_npu_available():
@@ -186,7 +207,7 @@ def get_peak_memory() -> tuple[int, int]:
     elif is_torch_cuda_available():
         return torch.cuda.max_memory_allocated(), torch.cuda.max_memory_reserved()
     else:
-        return 0, 0
+        return 0, -1
 
 
 def has_tokenized_data(path: "os.PathLike") -> bool:

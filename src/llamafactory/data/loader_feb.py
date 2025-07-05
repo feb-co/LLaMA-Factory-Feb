@@ -325,12 +325,12 @@ def get_dataset(
     # Load and preprocess dataset
     dataset_list = []
     for dataset_attr in get_dataset_list(data_args.dataset, data_args.dataset_dir):
-        with training_args.main_process_first(desc=f"load dataset: {dataset_attr.dataset_name}"):
+        with training_args.main_process_first(desc=f"load dataset: {dataset_attr.dataset_name}", local=(not data_args.data_shared_file_system)):
             sub_dataset = _load_single_dataset(
                 dataset_attr, model_args, data_args, training_args
             )
 
-        with training_args.main_process_first(desc=f"pre-process dataset: {dataset_attr.dataset_name}"):
+        with training_args.main_process_first(desc=f"pre-process dataset: {dataset_attr.dataset_name}", local=(not data_args.data_shared_file_system)):
             sub_dataset = _get_preprocessed_dataset(
                 sub_dataset,
                 data_args,

@@ -52,7 +52,6 @@ class TemplateFeb:
     format_user_suffix: "Formatter"
     format_user_audio_prefix: "Formatter"
     format_user_audio_suffix: "Formatter"
-    format_thought: "Formatter"
     format_assistant: "Formatter"
     format_system: "Formatter"
     format_function: "Formatter"
@@ -66,6 +65,10 @@ class TemplateFeb:
     replace_eos: bool
     replace_jinja_template: bool
     mm_plugin: "BasePlugin"
+    
+    def add_thought(self, content: str = "") -> str:
+        r"""Add thought to assistant message."""
+        return f"{self.thought_words[0]}\n{content}\n{self.thought_words[1]}\n\n"
 
     def encode_oneturn(
         self,
@@ -94,17 +97,6 @@ class TemplateFeb:
         encoded_messages = self._encode(tokenizer, messages, system, tools)
         return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
 
-    def encode_multiturn_with_longthought(
-        self,
-        tokenizer: "PreTrainedTokenizer",
-        messages: list[dict[str, str]],
-        system: Optional[str] = None,
-        tools: Optional[str] = None,
-    ) -> list[tuple[list[int], list[int], list[int]]]:
-        r"""Return multiple pairs of token ids representing prompts, thoughts and responses respectively."""
-        encoded_messages = self._encode(tokenizer, messages, system, tools)
-        return [(encoded_messages[i], encoded_messages[i + 1], encoded_messages[i + 2]) for i in range(0, len(encoded_messages), 3)]
-
     def encode_system(
         self,
         tokenizer: "PreTrainedTokenizer",
@@ -126,13 +118,11 @@ class TemplateFeb:
         self,
         tokenizer: "PreTrainedTokenizer",
         messages: list[dict[str, str]],
+        system: Optional[str] = None,
+        tools: Optional[str] = None,
     ) -> list[tuple[list[int], list[int]]]:
         r"""Return multiple pairs of token ids representing prompts and responses respectively."""
-        if messages[0]['role'] == Role.SYSTEM.value:
-            system = messages[0]['content']
-        else:
-            system = None
-        encoded_messages = self._encode(tokenizer, messages, system, None)
+        encoded_messages = self._encode(tokenizer, messages, system, tools)
         return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
 
     def encode_avatar_audio(
@@ -259,11 +249,12 @@ class TemplateFeb:
                     elements += self.format_system.apply(content=(system + tool_text))
 
             if message["role"] == Role.USER.value:
-                elements += self.format_user.apply(content=message["content"], idx=str(i // 2))
-            elif message["role"] == Role.THINK.value:
-                elements += self.format_thought.apply(content=message["content"])
+                elements += self.format_user.apply(content=message["content"])
             elif message["role"] == Role.ASSISTANT.value:
-                elements += self.format_assistant.apply(content=message["content"])
+                if "think" in message:
+                    elements += self.format_assistant.apply(content=self.add_thought(message["think"]) + message["content"])
+                else:
+                    elements += self.format_assistant.apply(content=message["content"])
             elif message["role"] == Role.OBSERVATION.value:
                 elements += self.format_observation.apply(content=message["content"])
             elif message["role"] == Role.FUNCTION.value:
@@ -273,7 +264,8 @@ class TemplateFeb:
             else:
                 raise NotImplementedError("Unexpected role: {}".format(message["role"]))
 
-            encoded_messages.append(self._convert_txt_elements_to_ids(tokenizer, elements))
+            if len(elements) > 0:
+                encoded_messages.append(self._convert_txt_elements_to_ids(tokenizer, elements))
 
         return encoded_messages
 
@@ -439,6 +431,82 @@ class TemplateFeb:
         return modelfile
 
 
+@dataclass
+class Llama2Template(TemplateFeb):
+    r"""A template that fuse the system message to first user message."""
+
+    @override
+    def _encode(
+        self,
+        tokenizer: "PreTrainedTokenizer",
+        messages: list[dict[str, str]],
+        system: str,
+        tools: str,
+    ) -> list[list[int]]:
+        system = system or self.default_system
+        encoded_messages = []
+        for i, message in enumerate(messages):
+            elements = []
+
+            system_text = ""
+            if i == 0:
+                elements += self.format_prefix.apply()
+                if system or tools:
+                    tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
+                    system_text = self.format_system.apply(content=(system + tool_text))[0]
+
+            if message["role"] == Role.USER.value:
+                elements += self.format_user.apply(content=system_text + message["content"])
+            elif message["role"] == Role.ASSISTANT.value:
+                if "think" in message:
+                    elements += self.format_assistant.apply(content=self.add_thought(message["think"]) + message["content"])
+                else:
+                    elements += self.format_assistant.apply(content=message["content"])
+            elif message["role"] == Role.OBSERVATION.value:
+                elements += self.format_observation.apply(content=message["content"])
+            elif message["role"] == Role.FUNCTION.value:
+                elements += self.format_function.apply(content=message["content"])
+            elif message["role"] == Role.MASK.value:
+                elements += self.format_assistant.apply(content=message["content"])
+            else:
+                raise NotImplementedError("Unexpected role: {}".format(message["role"]))
+
+            if len(elements) > 0:
+                encoded_messages.append(self._convert_txt_elements_to_ids(tokenizer, elements))
+
+        return encoded_messages
+
+    def _get_jinja_template(self, tokenizer: "PreTrainedTokenizer") -> str:
+        prefix = self._convert_slots_to_jinja(self.format_prefix.apply(), tokenizer)
+        system_message = self._convert_slots_to_jinja(
+            self.format_system.apply(), tokenizer, placeholder="system_message"
+        )
+        user_message = self._convert_slots_to_jinja(self.format_user.apply(), tokenizer)
+        assistant_message = self._convert_slots_to_jinja(self.format_assistant.apply(), tokenizer)
+        jinja_template = ""
+        if prefix:
+            jinja_template += "{{ " + prefix + " }}"
+
+        if self.default_system:
+            jinja_template += "{% set system_message = '" + self._jinja_escape(self.default_system) + "' %}"
+
+        jinja_template += (
+            "{% if messages[0]['role'] == 'system' %}{% set loop_messages = messages[1:] %}"
+            "{% set system_message = messages[0]['content'] %}{% else %}{% set loop_messages = messages %}{% endif %}"
+            "{% for message in loop_messages %}"
+            "{% if loop.index0 == 0 and system_message is defined %}"
+            "{% set content = " + system_message + " + message['content'] %}"
+            "{% else %}{% set content = message['content'] %}{% endif %}"
+            "{% if message['role'] == 'user' %}"
+            "{{ " + user_message + " }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ " + assistant_message + " }}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+        return jinja_template
+
+
 TEMPLATES: dict[str, "TemplateFeb"] = {}
 
 
@@ -449,7 +517,6 @@ def register_template(
     format_user_suffix: Optional["Formatter"] = None,
     format_user_audio_prefix: Optional["Formatter"] = None,
     format_user_audio_suffix: Optional["Formatter"] = None,
-    format_thought: Optional["Formatter"] = None,
     format_assistant: Optional["Formatter"] = None,
     format_system: Optional["Formatter"] = None,
     format_function: Optional["Formatter"] = None,
@@ -497,7 +564,6 @@ def register_template(
     default_user_suffix_formatter = EmptyFormatter()
     default_user_audio_prefix_formatter = EmptyFormatter()
     default_user_audio_suffix_formatter = EmptyFormatter()
-    default_thought_formatter = StringFormatter(slots=default_slots)
     default_assistant_formatter = StringFormatter(slots=default_slots)
     default_function_formatter = FunctionFormatter(slots=default_slots, tool_format="default")
     default_tool_formatter = ToolFormatter(tool_format="default")
@@ -509,7 +575,6 @@ def register_template(
         format_user_suffix=format_user_suffix or default_user_suffix_formatter,
         format_user_audio_prefix=format_user_audio_prefix or default_user_audio_prefix_formatter,
         format_user_audio_suffix=format_user_audio_suffix or default_user_audio_suffix_formatter,
-        format_thought=format_thought or default_thought_formatter,
         format_assistant=format_assistant or default_assistant_formatter,
         format_system=format_system or default_user_formatter,
         format_function=format_function or default_function_formatter,
@@ -619,6 +684,7 @@ register_template(
         slots=[
             (
                 "<|start_header_id|>user<|end_header_id|>\n\n{{content}}<|eot_id|>"
+                "<|start_header_id|>assistant<|end_header_id|>\n\n"
             )
         ]
     ),
@@ -629,31 +695,22 @@ register_template(
     ),
     format_user_suffix=EmptyFormatter(
         slots=[
-            "<|eot_id|>"
+            (
+                "<|eot_id|>"
+                "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            )
         ]
     ),
-    format_user_audio_prefix=EmptyFormatter(
-        slots=[
-            "<audio>"
-        ]
-    ),
-    format_user_audio_suffix=EmptyFormatter(
-        slots=[
-            "</audio>"
-        ]
-    ),
-    format_thought=StringFormatter(
-        slots=["<|start_header_id|>thought<|end_header_id|>\n\n{{content}}", {"eos_token"}]
-    ),
-    format_assistant=StringFormatter(
-        slots=["<|start_header_id|>assistant<|end_header_id|>\n\n{{content}}", {"eos_token"}]
-    ),
+    format_user_audio_prefix=EmptyFormatter(slots=["<audio>"]),
+    format_user_audio_suffix=EmptyFormatter(slots=["</audio>"]),
+    format_assistant=StringFormatter(slots=["{{content}}<|eot_id|>"]),
     format_system=StringFormatter(slots=["<|start_header_id|>system<|end_header_id|>\n\n{{content}}<|eot_id|>"]),
     format_function=FunctionFormatter(slots=["{{content}}<|eot_id|>"], tool_format="llama3"),
     format_observation=StringFormatter(
         slots=[
             (
                 "<|start_header_id|>ipython<|end_header_id|>\n\n{{content}}<|eot_id|>"
+                "<|start_header_id|>assistant<|end_header_id|>\n\n"
             )
         ]
     ),
@@ -661,4 +718,28 @@ register_template(
     format_prefix=EmptyFormatter(slots=[{"bos_token"}]),
     stop_words=["<|eot_id|>", "<|eom_id|>"],
     replace_jinja_template=True,
+)
+
+
+register_template(
+    name="gemma3",
+    format_user=StringFormatter(slots=["<start_of_turn>user\n{{content}}<end_of_turn>\n<start_of_turn>model\n"]),
+    format_user_prefix=EmptyFormatter(
+        slots=[
+            "<start_of_turn>user\n"
+        ]
+    ),
+    format_user_suffix=EmptyFormatter(slots=["<end_of_turn>\n<start_of_turn>model\n"]),
+    format_user_audio_prefix=EmptyFormatter(slots=["<audio>"]),
+    format_user_audio_suffix=EmptyFormatter(slots=["</audio>"]),
+    format_assistant=StringFormatter(slots=["{{content}}<end_of_turn>\n"]),
+    format_system=StringFormatter(slots=["{{content}}\n\n"]),
+    format_observation=StringFormatter(
+        slots=["<start_of_turn>tool\n{{content}}<end_of_turn>\n<start_of_turn>model\n"]
+    ),
+    format_prefix=EmptyFormatter(slots=[{"bos_token"}]),
+    stop_words=["<end_of_turn>"],
+    replace_eos=True,
+    mm_plugin=get_mm_plugin("gemma3", image_token="<image_soft_token>"),
+    template_class=Llama2Template,
 )

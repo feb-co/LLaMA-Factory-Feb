@@ -253,10 +253,6 @@ def convert_longthought(
         dataset_attr.think_tag: Role.THINK.value,
         
     }
-    first_tags = (dataset_attr.user_tag, dataset_attr.observation_tag)
-    second_tags = (dataset_attr.think_tag,)
-    thrid_tags = (dataset_attr.assistant_tag, dataset_attr.function_tag, dataset_attr.mask_tag)
-    accept_tags = (first_tags, second_tags, thrid_tags)
     messages = example[dataset_attr.messages]
     if (
         dataset_attr.system_tag
@@ -270,20 +266,19 @@ def convert_longthought(
 
     aligned_messages = []
     broken_data = False
+    think_text = ""
     for turn_idx, message in enumerate(messages):
-        if message[dataset_attr.role_tag].lower() not in accept_tags[turn_idx % 3]:
-            logger.warning_rank0(f"Invalid role tag in {messages}.")
-            broken_data = True
-
-        aligned_messages.append(
-            {"role": tag_mapping[message[dataset_attr.role_tag].lower()], "content": message[dataset_attr.content_tag]}
-        )
-
-    if (not dataset_attr.ranking and len(aligned_messages) % 3 != 0) or (
-        dataset_attr.ranking and len(aligned_messages) % 3 == 0
-    ):
-        logger.warning_rank0(f"Invalid message count in {messages}.")
-        broken_data = True
+        if tag_mapping[message[dataset_attr.role_tag].lower()] == Role.THINK.value:
+            think_text = message[dataset_attr.content_tag]
+        elif tag_mapping[message[dataset_attr.role_tag].lower()] == Role.ASSISTANT.value:
+            aligned_messages.append(
+                {"role": tag_mapping[message[dataset_attr.role_tag].lower()], "think": think_text, "content": message[dataset_attr.content_tag]}
+            )
+            think_text = ""
+        else:
+            aligned_messages.append(
+                {"role": tag_mapping[message[dataset_attr.role_tag].lower()], "content": message[dataset_attr.content_tag]}
+            )
 
     if dataset_attr.kto_tag and isinstance(example[dataset_attr.kto_tag], bool):  # kto example
         prompt = aligned_messages[:-1]
@@ -299,13 +294,6 @@ def convert_longthought(
     ):  # pairwise example
         chosen = example[dataset_attr.chosen]
         rejected = example[dataset_attr.rejected]
-        if (
-            chosen[dataset_attr.role_tag].lower() not in accept_tags[-1]
-            or rejected[dataset_attr.role_tag].lower() not in accept_tags[-1]
-        ):
-            logger.warning_rank0(f"Invalid role tag in {[chosen, rejected]}.")
-            broken_data = True
-
         prompt = aligned_messages
         response = [
             {"role": tag_mapping[chosen[dataset_attr.role_tag].lower()], "content": chosen[dataset_attr.content_tag]},

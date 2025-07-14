@@ -30,7 +30,7 @@ from ...extras import logging
 from ...extras.constants import IGNORE_INDEX
 from ..data_utils import Role
 from .processor_utils import DatasetProcessor, packing_conversation
-
+from ..template_feb import Llama2Template
 
 if TYPE_CHECKING:
     from ..mm_plugin import AudioInput, ImageInput, VideoInput
@@ -41,78 +41,6 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ConversationDatasetProcessor(DatasetProcessor):
-    def _encode_normal_message(
-        self,
-        messages: Optional[list],
-        train_on_prompt: bool,
-        mask_history: bool,
-        input_ids: Optional[list],
-        labels: Optional[list],
-    ):
-        encoded_pairs = self.template.encode_multiturn(tokenizer=self.tokenizer, messages=messages, system=None, tools=None)
-        text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
-        for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
-            source_len = len(source_ids)
-            target_len = len(target_ids)
-
-            if train_on_prompt:
-                source_label = source_ids
-            elif turn_idx != 0 and self.template.efficient_eos:
-                source_label = [self.tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
-            else:
-                source_label = [IGNORE_INDEX] * source_len
-
-            if mask_history and turn_idx != len(encoded_pairs) - 1:
-                target_label = [IGNORE_INDEX] * target_len
-            elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
-                target_label = [IGNORE_INDEX] * target_len
-            else:
-                target_label = target_ids
-
-            input_ids += source_ids + target_ids
-            labels += source_label + target_label
-
-        return input_ids, labels
-
-    def _encode_longthought_message(
-        self,
-        messages: Optional[list],
-        train_on_prompt: bool,
-        mask_history: bool,
-        input_ids: Optional[list],
-        labels: Optional[list],
-    ):
-        encoded_pairs = self.template.encode_multiturn_with_longthought(tokenizer=self.tokenizer, messages=messages, system=None, tools=None)
-        text_pairs = [(messages[i], messages[i + 1], messages[i + 2]) for i in range(0, len(messages), 3)]
-        for turn_idx, (source_ids, thought_ids, target_ids) in enumerate(encoded_pairs):
-            source_len = len(source_ids)
-            thought_len = len(thought_ids)
-            target_len = len(target_ids)
-
-            if train_on_prompt:
-                source_label = source_ids
-            elif turn_idx != 0 and self.template.efficient_eos:
-                source_label = [self.tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
-            else:
-                source_label = [IGNORE_INDEX] * source_len
-
-            if mask_history and turn_idx != len(encoded_pairs) - 1:
-                thought_label = [IGNORE_INDEX] * thought_len
-            else:
-                thought_label = thought_ids
-
-            if mask_history and turn_idx != len(encoded_pairs) - 1:
-                target_label = [IGNORE_INDEX] * target_len
-            elif text_pairs[turn_idx][2]["role"] == Role.MASK.value:
-                target_label = [IGNORE_INDEX] * target_len
-            else:
-                target_label = target_ids
-
-            input_ids += source_ids + thought_ids + target_ids
-            labels += source_label + thought_label + target_label
-
-        return input_ids, labels
-
     def _encode_data_example(
         self,
         prompt: list[dict[str, str]],
@@ -123,13 +51,34 @@ class ConversationDatasetProcessor(DatasetProcessor):
         messages = prompt + response
         input_ids, labels = [], []
 
-        prefix_ids = self.template.encode_system(tokenizer=self.tokenizer, system=system, tools=tools)
-        if len(messages)%2 == 0:
-            input_ids, labels = self._encode_normal_message(messages, self.data_args.train_on_prompt, self.data_args.mask_history, input_ids, labels)
-        elif len(messages)%3 == 0:
-            input_ids, labels = self._encode_longthought_message(messages, self.data_args.train_on_prompt, self.data_args.mask_history, input_ids, labels)
+        if isinstance(self.template, Llama2Template):
+            prefix_ids = []
+            encoded_pairs = self.template.encode_multiturn(tokenizer=self.tokenizer, messages=messages, system=system, tools=tools)
         else:
-            raise NotImplementedError
+            prefix_ids = self.template.encode_system(tokenizer=self.tokenizer, system=system, tools=tools)
+            encoded_pairs = self.template.encode_multiturn(tokenizer=self.tokenizer, messages=messages, system=None, tools=None)
+
+        text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
+        for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
+            source_len = len(source_ids)
+            target_len = len(target_ids)
+
+            if self.data_args.train_on_prompt:
+                source_label = source_ids
+            elif turn_idx != 0 and self.template.efficient_eos:
+                source_label = [self.tokenizer.eos_token_id] + [IGNORE_INDEX] * (source_len - 1)
+            else:
+                source_label = [IGNORE_INDEX] * source_len
+
+            if self.data_args.mask_history and turn_idx != len(encoded_pairs) - 1:
+                target_label = [IGNORE_INDEX] * target_len
+            elif text_pairs[turn_idx][1]["role"] == Role.MASK.value:
+                target_label = [IGNORE_INDEX] * target_len
+            else:
+                target_label = target_ids
+
+            input_ids += source_ids + target_ids
+            labels += source_label + target_label
 
         assert len(input_ids) == len(labels), "The length of input_ids should equal with labels' length!"
         return prefix_ids, input_ids, labels
@@ -242,8 +191,14 @@ class InstructionDatasetProcessor(DatasetProcessor):
     ) -> tuple[list[int], list[int], list[int]]:
         messages = prompt + response
         input_ids, labels = [], []
-        prefix_ids = self.template.encode_system(tokenizer=self.tokenizer, system=system, tools=tools)
-        encoded_pairs = self.template.encode_instruction(tokenizer=self.tokenizer, messages=messages)
+
+        if isinstance(self.template, Llama2Template):
+            prefix_ids = []
+            encoded_pairs = self.template.encode_instruction(tokenizer=self.tokenizer, messages=messages, system=system, tools=tools)
+        else:
+            prefix_ids = self.template.encode_system(tokenizer=self.tokenizer, system=system, tools=tools)
+            encoded_pairs = self.template.encode_instruction(tokenizer=self.tokenizer, messages=messages)
+
         text_pairs = [(messages[i], messages[i + 1]) for i in range(0, len(messages), 2)]
         for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
             source_len = len(source_ids)

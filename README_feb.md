@@ -9,6 +9,7 @@
 
 - **Mixed data training**: Supporting simultaneous training with multiple data types: Pretrain, Instruction training, Conversation training.
 - **Mixed peft training**: Supporting simultaneous training with multiple peft types: lora tuning, full param tuning.
+- **Voice2Voice training**: Support end-to-end Voice2Voice training.
 
 ## Getting Started 🛞
 

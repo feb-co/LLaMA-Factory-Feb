@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -23,7 +22,6 @@ from typing import Any, Optional, Union
 
 import torch
 import transformers
-import yaml
 from omegaconf import OmegaConf
 from transformers import HfArgumentParser
 from transformers.integrations import is_deepspeed_zero3_enabled
@@ -34,6 +32,7 @@ from transformers.utils import is_torch_bf16_gpu_available, is_torch_npu_availab
 from ..extras import logging
 from ..extras.constants import CHECKPOINT_NAMES, EngineName
 from ..extras.misc import check_dependencies, check_version, get_current_device, is_env_enabled
+from ..extras.packages import is_transformers_version_greater_than
 from .data_args import DataArguments
 from .evaluation_args import EvaluationArguments
 from .finetuning_args import FinetuningArguments
@@ -62,11 +61,11 @@ def read_args(args: Optional[Union[dict[str, Any], list[str]]] = None) -> Union[
 
     if sys.argv[1].endswith(".yaml") or sys.argv[1].endswith(".yml"):
         override_config = OmegaConf.from_cli(sys.argv[2:])
-        dict_config = yaml.safe_load(Path(sys.argv[1]).absolute().read_text())
+        dict_config = OmegaConf.load(Path(sys.argv[1]).absolute())
         return OmegaConf.to_container(OmegaConf.merge(dict_config, override_config))
     elif sys.argv[1].endswith(".json"):
         override_config = OmegaConf.from_cli(sys.argv[2:])
-        dict_config = json.loads(Path(sys.argv[1]).absolute().read_text())
+        dict_config = OmegaConf.load(Path(sys.argv[1]).absolute())
         return OmegaConf.to_container(OmegaConf.merge(dict_config, override_config))
     else:
         return sys.argv[1:]
@@ -113,8 +112,8 @@ def _verify_model_args(
         raise ValueError("Adapter is only valid for the LoRA method.")
 
     if model_args.quantization_bit is not None:
-        if finetuning_args.finetuning_type != "lora":
-            raise ValueError("Quantization is only compatible with the LoRA method.")
+        if finetuning_args.finetuning_type not in ["lora", "oft"]:
+            raise ValueError("Quantization is only compatible with the LoRA or OFT method.")
 
         if finetuning_args.pissa_init:
             raise ValueError("Please use scripts/pissa_init.py to initialize PiSSA for a quantized model.")
@@ -148,7 +147,7 @@ def _check_extra_dependencies(
         check_version("mixture-of-depth>=1.1.6", mandatory=True)
 
     if model_args.infer_backend == EngineName.VLLM:
-        check_version("vllm>=0.4.3,<=0.9.1")
+        check_version("vllm>=0.4.3,<=0.10.0")
         check_version("vllm", mandatory=True)
     elif model_args.infer_backend == EngineName.SGLANG:
         check_version("sglang>=0.4.5")
@@ -165,6 +164,9 @@ def _check_extra_dependencies(
 
     if finetuning_args.use_adam_mini:
         check_version("adam-mini", mandatory=True)
+
+    if finetuning_args.use_swanlab:
+        check_version("swanlab", mandatory=True)
 
     if finetuning_args.plot_loss:
         check_version("matplotlib", mandatory=True)
@@ -303,9 +305,8 @@ def get_train_args(args: Optional[Union[dict[str, Any], list[str]]] = None) -> _
     if model_args.use_unsloth and is_deepspeed_zero3_enabled():
         raise ValueError("Unsloth is incompatible with DeepSpeed ZeRO-3.")
 
-    if data_args.neat_packing and not data_args.packing:
-        logger.warning_rank0("`neat_packing` requires `packing` is True. Change `packing` to True.")
-        data_args.packing = True
+    if data_args.neat_packing and is_transformers_version_greater_than("4.53.0"):
+        raise ValueError("Neat packing is incompatible with transformers>=4.53.0.")
 
     _set_env_vars()
     _verify_model_args(model_args, data_args, finetuning_args)
@@ -351,6 +352,9 @@ def get_train_args(args: Optional[Union[dict[str, Any], list[str]]] = None) -> _
     if finetuning_args.finetuning_type == "lora":
         # https://github.com/huggingface/transformers/blob/v4.50.0/src/transformers/trainer.py#L782
         training_args.label_names = training_args.label_names or ["labels"]
+
+    if "swanlab" in training_args.report_to and finetuning_args.use_swanlab:
+        training_args.report_to.remove("swanlab")
 
     if (
         training_args.parallel_mode == ParallelMode.DISTRIBUTED

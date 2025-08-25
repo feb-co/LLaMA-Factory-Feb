@@ -258,7 +258,7 @@ class TemplateFeb:
             elif message["role"] == Role.OBSERVATION.value:
                 elements += self.format_observation.apply(content=message["content"])
             elif message["role"] == Role.FUNCTION.value:
-                elements += self.format_function.apply(content=message["content"])
+                elements += self.format_function.apply(content=message["content"], thought_words=self.thought_words)
             elif message["role"] == Role.MASK.value:
                 elements += self.format_assistant.apply(content=message["content"])
             else:

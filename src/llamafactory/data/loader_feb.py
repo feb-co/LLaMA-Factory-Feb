@@ -273,45 +273,8 @@ def get_dataset(
                 else:
                     train_dataset_list.append(part)
 
-            # for tokenizer_dir in data_args.tokenized_path:
-            #     if has_tokenized_data(tokenizer_dir):
-            #         logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
-            #         tokenized_data = load_from_disk(tokenizer_dir)
-            #         logger.info_rank0(f"Loaded tokenized dataset from {tokenizer_dir}.")
-
-            #         if isinstance(tokenized_data, DatasetDict):
-            #             train_dataset_list.append(tokenized_data["train"])
-            #         else:
-            #             train_dataset_list.append(tokenized_data)
-            #     else:
-            #         raise ValueError(f"{tokenizer_dir} not exist, list tokenized_path only support for exist dataset path.")
-
             train_dataset = merge_dataset(train_dataset_list, data_args, seed=training_args.seed)
             train_dataset = train_dataset.shuffle(seed=training_args.seed)
-
-            # arrow_files: List[Path] = []
-            # for tdir in data_args.tokenized_path:
-            #     if not has_tokenized_data(tdir):
-            #         raise ValueError(
-            #             f"{tdir} not exist or has no .arrow files. "
-            #         )
-            #     found = sorted(Path(f"{tdir}/train/").glob("*.arrow"))
-            #     logger.info_rank0(f"✅ Found {len(found)} arrow fragments in {tdir}...")
-            #     arrow_files.extend(found)
-
-            # if not arrow_files:
-            #     raise RuntimeError("❌ No .arrow files found, please check the tokenized_path input.")
-
-            # logger.info_rank0("⏳ Loading all Arrow slices into memory-map at once …")
-            # arrow_files = [str(p) for p in arrow_files if "cache" not in str(p)]
-            # random.shuffle(arrow_files)
-            # train_dataset = load_dataset(
-            #     "arrow",
-            #     data_files={"train": arrow_files},
-            #     split="train",
-            #     cache_dir=model_args.cache_dir,
-            #     streaming=True,
-            # # train_dataset = train_dataset.shuffle(seed=training_args.seed)
 
             dataset_module = {}
             dataset_module["train_dataset"] = train_dataset

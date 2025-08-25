@@ -229,18 +229,25 @@ def process_audio_messages(
         # audio output
         if turn_idx == len(encoded_pairs) - 1 and "audio_codes" in target_dict:
             if template.name == "llama3":
-                start_prefix_idx = 3
+                valid_token_l_index = len(text_labels)+source_text_len-1
+                valid_token_r_index = len(text_labels)+source_text_len+target_text_len
+            elif template.name == "gemma3_system":
+                valid_token_l_index = len(text_labels)+source_text_len-1
+                valid_token_r_index = len(text_labels)+source_text_len+target_text_len-1
             else:
-                start_prefix_idx = 0
+                raise NotImplementedError
 
             try:
-                t2a_attention_mask = tokenizer.convert_t2a_attention_mask(len(target_token_ids[start_prefix_idx:]), len(target_dict["audio_codes"][0]))
+                t2a_attention_mask = tokenizer.convert_t2a_attention_mask(
+                    valid_token_r_index - valid_token_l_index,
+                    len(target_dict["audio_codes"][0])
+                )
             except Exception as e:
                 logger.warning_rank0(e)
                 return None
 
             valid_tokens_pos = [idx for idx in range(
-                len(text_labels)+source_text_len+start_prefix_idx, len(text_labels)+source_text_len+len(target_token_ids)
+                valid_token_l_index, valid_token_r_index
             )]
             audio_codes_ids = target_dict["audio_codes"]
             audio_codes_labels = copy.deepcopy(target_dict["audio_codes"])

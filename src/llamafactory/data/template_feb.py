@@ -722,7 +722,7 @@ register_template(
 
 
 register_template(
-    name="gemma3",
+    name="gemma3_system",
     format_user=StringFormatter(slots=["<start_of_turn>user\n{{content}}<end_of_turn>\n<start_of_turn>model\n"]),
     format_user_prefix=EmptyFormatter(
         slots=[
@@ -733,13 +733,12 @@ register_template(
     format_user_audio_prefix=EmptyFormatter(slots=["<audio>"]),
     format_user_audio_suffix=EmptyFormatter(slots=["</audio>"]),
     format_assistant=StringFormatter(slots=["{{content}}<end_of_turn>\n"]),
-    format_system=StringFormatter(slots=["{{content}}\n\n"]),
+    format_system=StringFormatter(slots=["<start_of_turn>system\n{{content}}<end_of_turn>\n"]),
     format_observation=StringFormatter(
         slots=["<start_of_turn>tool\n{{content}}<end_of_turn>\n<start_of_turn>model\n"]
     ),
     format_prefix=EmptyFormatter(slots=[{"bos_token"}]),
     stop_words=["<end_of_turn>"],
     replace_eos=True,
-    mm_plugin=get_mm_plugin("gemma3", image_token="<image_soft_token>"),
-    template_class=Llama2Template,
+    replace_jinja_template=True,
 )

@@ -171,6 +171,12 @@ class BaseModelArguments:
         default=False,
         metadata={"help": "Whether to trust the execution of code from datasets/models defined on the Hub or not."},
     )
+    
+    # voice model
+    tts_adapter_path: str = field(
+        default=None,
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
 
     def __post_init__(self):
         if self.model_name_or_path is None:

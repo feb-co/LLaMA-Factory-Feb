@@ -13,9 +13,12 @@
 # limitations under the License.
 
 import re
+import glob
 from typing import TYPE_CHECKING
 
 import torch
+from safetensors.torch import load_file
+
 from peft.utils import ModulesToSaveWrapper
 from peft import LoraConfig, LoraModel, PeftModel, TaskType, get_peft_model
 from transformers.integrations import is_deepspeed_zero3_enabled
@@ -196,11 +199,21 @@ def _setup_lora_tuning(
 
         logger.info_rank0("Loaded adapter(s): {}".format(",".join(model_args.adapter_name_or_path)))
 
-    if is_trainable and adapter_to_resume is None:  # create new lora weights while training
+    if is_trainable and adapter_to_resume is None:  # create new lora weights while training    
+        linear_modules = find_all_linear_modules(model, finetuning_args.freeze_vision_tower)
         if len(finetuning_args.lora_target) == 1 and finetuning_args.lora_target[0] == "all":
-            target_modules = find_all_linear_modules(model, finetuning_args.freeze_vision_tower)
+            target_modules = linear_modules
         else:
-            target_modules = finetuning_args.lora_target
+            additional_target = set()
+            target_modules = set()
+            for module_name in linear_modules:
+                if any(target_module in module_name for target_module in finetuning_args.lora_target) \
+                    and not any(target_module in module_name for target_module in finetuning_args.additional_target):
+                    target_modules.add(module_name)
+                elif any(target_module in module_name for target_module in finetuning_args.additional_target):
+                    additional_target.add(module_name)
+            target_modules = list(target_modules)
+            finetuning_args.additional_target = list(additional_target)
 
         if finetuning_args.use_llama_pro:
             target_modules = find_expanded_modules(model, target_modules, finetuning_args.freeze_trainable_layers)
@@ -260,6 +273,23 @@ def _setup_lora_tuning(
     return model
 
 
+def load_tts_adapter_state_dict(tts_adapter, tts_path):
+    tensor_file_list = list(glob.glob(f"{tts_path}/*.safetensors"))
+    tensor_dict = {}
+    for tensor_file in tensor_file_list:
+        tensor_dict.update(load_file(tensor_file))
+    tensor_dict = {key.replace("tts_adapter.", ""): tensor_dict[key] for key in tensor_dict if "tts_adapter" in key and "encoder_mlp" not in key}
+
+    unexpect_keys = []
+    for name, param in tts_adapter.named_parameters():
+        if name in tensor_dict:
+            param.data.copy_(tensor_dict[name].to(param.device))
+        else:
+            unexpect_keys.append(name)
+    logger.info_rank0(f"Init model tts adapter, unexpect_keys: {unexpect_keys}")
+    # tts_adapter.load_state_dict(tensor_dict, strict=False)
+
+
 def init_adapter(
     config: "PretrainedConfig",
     model: "PreTrainedModel",
@@ -273,6 +303,10 @@ def init_adapter(
 
     Note that the trainable parameters must be cast to float32.
     """
+    # load tts adapter param
+    if model_args.tts_adapter_path is not None:
+        load_tts_adapter_state_dict(model.tts_adapter, model_args.tts_adapter_path)
+
     if is_trainable and getattr(model, "quantization_method", None) is not None:
         if finetuning_args.finetuning_type != "lora":
             raise ValueError("Quantized models can only be used for the LoRA tuning.")
